@@ -2,6 +2,7 @@ Package: com.brend0n.volumemixer
 Name: VolumeMixer
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
 Version: 0.0.7~beta3
+Architecture: iphoneos-arm
 Description: Volume control for individual app
 Maintainer: Brend0n <brendonjkding@126.com>
 Author: Brend0n <brendonjkding@126.com>
@@ -9,4 +10,3 @@ Section: Tweaks
 Icon: file:///Library/PreferenceBundles/volumemixer.bundle/icon@2x.png
 Depiction: http://brendonjkding.github.io/depictions/web/?p=com.brend0n.volumemixer
 SileoDepiction: http://brendonjkding.github.io/depictions/web/com.brend0n.volumemixer/depiction.json
-Architecture: iphoneos-arm64e

@@ -2,7 +2,7 @@
 #import "BDInfoListController.h"
 #import <Preferences/PSSpecifier.h>
 
-// extern UIApplication *UIApp;
+extern UIApplication *UIApp;
 
 @implementation VMAuthorListController
 - (NSArray *)specifiers {

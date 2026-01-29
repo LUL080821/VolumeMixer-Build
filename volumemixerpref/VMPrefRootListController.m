@@ -7,7 +7,7 @@
 #import <notify.h>
 #import <dlfcn.h>
 
-// extern UIApplication *UIApp;
+extern UIApplication *UIApp;
 
 @implementation VMPrefRootListController{
   NSDictionary *_old_prefs;

@@ -1,7 +1,7 @@
 #import "BDInfoListController.h"
 #import <Preferences/PSSpecifier.h>
 
-// extern UIApplication *UIApp;
+extern UIApplication *UIApp;
 
 @interface PSTableCell()
 - (id)iconImageView;
