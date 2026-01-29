@@ -30,7 +30,7 @@ jobs:
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless ARCHS=arm64e
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: VolumeMixer_DEB
           path: packages/*.deb
