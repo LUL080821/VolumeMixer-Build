@@ -9,63 +9,53 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Manual Install Theos
+      - name: Install Theos
         run: |
           git clone --recursive https://github.com/theos/theos.git $HOME/theos
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
 
-      - name: Prepare Private Frameworks (iOS 16.0)
+      - name: Install LibActivator Headers
         run: |
-          # Download SDKs with Private Frameworks for iOS 16.0
-          git clone --depth 1 https://github.com/theos/sdks.git tmp_sdks
-          
-          # Create PrivateFrameworks directory in Theos
-          mkdir -p $HOME/theos/lib/PrivateFrameworks
-          
-          # Copy Private Frameworks from iOS 16.0 SDK
-          if [ -d "tmp_sdks/iPhoneOS16.0.sdk/System/Library/PrivateFrameworks" ]; then
-            cp -r tmp_sdks/iPhoneOS16.0.sdk/System/Library/PrivateFrameworks/* $HOME/theos/lib/PrivateFrameworks/ 2>/dev/null || true
-          else
-            # Fallback to iOS 14.5 if 16.0 not available
-            cp -r tmp_sdks/iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/BackBoardServices.framework $HOME/theos/lib/PrivateFrameworks/ 2>/dev/null || true
-            cp -r tmp_sdks/iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/MediaRemote.framework $HOME/theos/lib/PrivateFrameworks/ 2>/dev/null || true
-          fi
-          
-          # Cleanup
-          rm -rf tmp_sdks
-
-      - name: Install LibActivator
-        run: |
-          git clone https://github.com/rpetrich/libactivator.git
+          git clone https://github.com/rpetrich/libactivator.git libactivator_src
           mkdir -p $HOME/theos/include/libactivator
-          cp libactivator/*.h $HOME/theos/include/libactivator/
-          mkdir -p $HOME/theos/lib
-          cat > $HOME/theos/lib/libactivator.tbd <<'EOF'
-          ---
-          archs:           [ arm64, arm64e ]
-          platform:        ios
-          install-name:    /usr/lib/libactivator.dylib
-          exports:
-            - archs:           [ arm64, arm64e ]
-              symbols:         [ _LASharedActivator ]
-              objc-classes:    [ LAEvent, LAListener, LASettingsViewController ]
-          ...
-          EOF
+          cp libactivator_src/*.h $HOME/theos/include/libactivator/ 2>/dev/null || true
+          rm -rf libactivator_src
 
       - name: Install Ldid
         run: |
-          curl -Lo ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_macosx_x86_64
-          chmod +x ldid
-          sudo mv ldid /usr/local/bin/ldid
+          curl -L https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_macosx_x86_64 -o /tmp/ldid
+          chmod +x /tmp/ldid
+          sudo mv /tmp/ldid /usr/local/bin/ldid
 
-      - name: Build VolumeMixer for iOS 16.0 (arm64e)
+      - name: Build VolumeMixer (arm64e for M2)
+        env:
+          THEOS: ${{ env.THEOS }}
         run: |
           export THEOS=$HOME/theos
-          make clean
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless DEBUG=0
+          export SDKVERSION=16.0
+          
+          # Clean previous builds
+          make clean || true
+          
+          # Build with explicit flags for iOS 16 / arm64e
+          make package \
+            FINALPACKAGE=1 \
+            THEOS_PACKAGE_SCHEME=rootless \
+            DEBUG=0 \
+            ARCHS=arm64e \
+            TARGET=iphone:clang:latest:16.0
+
+      - name: Check Build Output
+        run: |
+          echo "Contents of packages directory:"
+          ls -lah packages/ 2>/dev/null || echo "No packages directory"
+          echo ""
+          echo "Contents of .theos directory:"
+          ls -lah .theos/obj/ 2>/dev/null || echo "No .theos/obj directory"
 
       - name: Upload Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: VolumeMixer_DEB_iOS16_M2
+          name: VolumeMixer_DEB_iOS16
           path: packages/*.deb
