@@ -1,0 +1,36 @@
+name: Build VolumeMixer
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Theos
+        run: |
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
+          echo "THEOS=~/theos" >> $GITHUB_ENV
+
+      - name: Install Dependencies
+        run: |
+          brew install ldid
+          echo "export THEOS=~/theos" >> ~/.bash_profile
+          source ~/.bash_profile
+
+      - name: Build Tweak (arm64e)
+        run: |
+          # Sửa Makefile để ép build arm64e trên Mac
+          sed -i '' 's/ARCHS = arm64/ARCHS = arm64e/g' Makefile
+          sed -i '' 's/TARGET :=.*/TARGET := iphone:clang:latest:15.0/g' Makefile
+          
+          # Build
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless ARCHS=arm64e
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: VolumeMixer_DEB
+          path: packages/*.deb

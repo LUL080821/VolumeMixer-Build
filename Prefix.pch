@@ -1,0 +1,29 @@
+#ifdef __OBJC__
+    #import <Foundation/Foundation.h>
+    #import <UIKit/UIKit.h>
+    #import <AudioToolbox/AudioToolbox.h>
+
+    // --- CÁC HẰNG SỐ CẤU HÌNH ---
+    #define kBundlePath @"/Library/Application Support/VolumeMixer.bundle"
+    #define kWebKitBundleId @"com.apple.WebKit.WebContent"
+    
+    // --- DANH SÁCH PREFERENCE KEYS ---
+    #define kPrefScalesKey @"scales"
+    #define kPrefAppsKey @"apps"
+    #define kPrefPanelPortraitYKey @"panelPortraitY"
+    #define kPrefPanelLandScapeYKey @"panelLandScapeY"
+    #define kPrefIsHideInactiveAppsKey @"isHideInactiveApps"
+    #define kPrefIsHideBackgroundKey @"isHideBackground"
+    #define kPrefShowsOnLockScreenKey @"showsOnLockScreen"
+    #define kPrefByVolumeButtonKey @"byVolumeButton"
+    #define kPrefWebAudioUnitHookEnabledKey @"webAudioUnitHookEnabled"
+    #define kPrefWebEnabledKey @"webEnabled"
+    #define kPrefAudioMixEnabledKey @"audioMixEnabled"
+    #define kPrefAudiomixAppsKey @"audiomixApps"
+    #define kPrefDidShowReleaseAlertKey @"didShowReleaseAlert"
+
+    // --- MACROS ---
+    #define UIApp [UIApplication sharedApplication]
+    #define VMNSLocalizedString(key) [[NSBundle bundleForClass:[self class]] localizedStringForKey:(key) value:(key) table:@"Root"]
+    #define kAllPrefKeys @[         kPrefScalesKey, kPrefAppsKey, kPrefPanelPortraitYKey, kPrefPanelLandScapeYKey,         kPrefIsHideInactiveAppsKey, kPrefIsHideBackgroundKey, kPrefShowsOnLockScreenKey,         kPrefByVolumeButtonKey, kPrefWebAudioUnitHookEnabledKey, kPrefWebEnabledKey,         kPrefAudioMixEnabledKey, kPrefAudiomixAppsKey, kPrefDidShowReleaseAlertKey     ]
+#endif
