@@ -1,9 +1,9 @@
 ifdef SIMULATOR
 export TARGET = simulator:clang:latest:8.0
 else
-export TARGET = iphone:clang:latest:16.0
+export TARGET = iphone:clang:latest:14.5
 	ifeq ($(debug),0)
-		export ARCHS = armv7 arm64 arm64e
+		export ARCHS = arm64e
 	else
 		export ARCHS = arm64 arm64e
 	endif
@@ -15,8 +15,9 @@ TWEAK_NAME = VolumeMixer
 
 VolumeMixer_FILES = Tweak.xm VMHookInfo.mm VMHookAudioUnit.mm 
 VolumeMixer_FILES += MRYIPC/MRYIPCCenter.m
-VolumeMixer_CFLAGS = -fobjc-arc -include Prefix.pch
-VolumeMixer_CCFLAGS = -std=c++17
+VolumeMixer_CFLAGS = -fobjc-arc -include Prefix.pch -Wno-error
+VolumeMixer_CCFLAGS = -std=c++17 -fno-aligned-allocation
+VolumeMixer_LDFLAGS = -lc++ -fno-aligned-allocation
 VolumeMixer_LIBRARIES += substrate
 VolumeMixer_LOGOSFLAGS += -c generator=MobileSubstrate
 
@@ -31,7 +32,7 @@ volumemixer_FILES = volumemixerpref/VMPrefRootListController.m volumemixerpref/B
 volumemixer_INSTALL_PATH = /Library/PreferenceBundles
 volumemixer_FRAMEWORKS = UIKit
 volumemixer_PRIVATE_FRAMEWORKS = Preferences
-volumemixer_CFLAGS = -fobjc-arc -include Prefix.pch
+volumemixer_CFLAGS = -fobjc-arc -include Prefix.pch -Wno-error
 volumemixer_EXTRA_FRAMEWORKS += AltList
 volumemixer_RESOURCE_DIRS = volumemixerpref/Resources
 
@@ -42,7 +43,8 @@ CCVolumeMixer_PRIVATE_FRAMEWORKS = ControlCenterUIKit
 CCVolumeMixer_INSTALL_PATH = /Library/ControlCenter/Bundles/
 CCVolumeMixer_RESOURCE_DIRS = ccvolumemixer/Resources
 
-export ADDITIONAL_CFLAGS += -Wno-error=unused-variable -Wno-error=unused-function -Wno-error=unused-value -include Prefix.pch
+export ADDITIONAL_CFLAGS += -Wno-error=unused-variable -Wno-error=unused-function -Wno-error=unused-value -Wno-error=deprecated-declarations -include Prefix.pch
+export ADDITIONAL_LDFLAGS += -lc++ -Wl,-ld_classic
 
 include $(THEOS)/makefiles/common.mk
 include $(THEOS_MAKE_PATH)/tweak.mk
