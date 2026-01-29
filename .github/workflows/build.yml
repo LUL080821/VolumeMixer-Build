@@ -5,26 +5,31 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Install Theos
         run: |
           bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
-          echo "THEOS=~/theos" >> $GITHUB_ENV
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
 
-      - name: Install Dependencies
+      - name: Install Ldid (Direct Download)
         run: |
-          brew install ldid
-          echo "export THEOS=~/theos" >> ~/.bash_profile
-          source ~/.bash_profile
+          # Tải ldid trực tiếp để tránh lỗi Homebrew exit code 8
+          curl -Lo ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_macosx_x86_64
+          chmod +x ldid
+          sudo mv ldid /usr/local/bin/ldid
 
       - name: Build Tweak (arm64e)
         run: |
-          # Sửa Makefile để ép build arm64e trên Mac
-          sed -i '' 's/ARCHS = arm64/ARCHS = arm64e/g' Makefile
-          sed -i '' 's/TARGET :=.*/TARGET := iphone:clang:latest:15.0/g' Makefile
+          export THEOS=$HOME/theos
+          
+          # Sửa Makefile: Ép dùng arm64e và SDK mới nhất
+          sed -i '' 's/^ARCHS =.*/ARCHS = arm64e/' Makefile
+          sed -i '' 's/^TARGET =.*/TARGET := iphone:clang:latest:15.0/' Makefile
+          # Xóa các dòng cấu hình thừa nếu có
+          sed -i '' '/_ARCHS/d' Makefile || true
           
           # Build
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless ARCHS=arm64e
