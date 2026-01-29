@@ -14,19 +14,24 @@ jobs:
           git clone --recursive https://github.com/theos/theos.git $HOME/theos
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
 
-      - name: Prepare Private Frameworks (Fix Missing Frameworks)
+      - name: Prepare Private Frameworks (iOS 16.0)
         run: |
-          # 1. Tải kho SDK chứa Private Frameworks (tải tạm vào thư mục tmp)
+          # Download SDKs with Private Frameworks for iOS 16.0
           git clone --depth 1 https://github.com/theos/sdks.git tmp_sdks
           
-          # 2. Tạo thư mục riêng để chứa các Framework này trong Theos
+          # Create PrivateFrameworks directory in Theos
           mkdir -p $HOME/theos/lib/PrivateFrameworks
           
-          # 3. Copy BackBoardServices và MediaRemote (2 cái hay thiếu nhất) vào đó
-          cp -r tmp_sdks/iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/BackBoardServices.framework $HOME/theos/lib/PrivateFrameworks/
-          cp -r tmp_sdks/iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/MediaRemote.framework $HOME/theos/lib/PrivateFrameworks/
+          # Copy Private Frameworks from iOS 16.0 SDK
+          if [ -d "tmp_sdks/iPhoneOS16.0.sdk/System/Library/PrivateFrameworks" ]; then
+            cp -r tmp_sdks/iPhoneOS16.0.sdk/System/Library/PrivateFrameworks/* $HOME/theos/lib/PrivateFrameworks/ 2>/dev/null || true
+          else
+            # Fallback to iOS 14.5 if 16.0 not available
+            cp -r tmp_sdks/iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/BackBoardServices.framework $HOME/theos/lib/PrivateFrameworks/ 2>/dev/null || true
+            cp -r tmp_sdks/iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/MediaRemote.framework $HOME/theos/lib/PrivateFrameworks/ 2>/dev/null || true
+          fi
           
-          # 4. Dọn dẹp
+          # Cleanup
           rm -rf tmp_sdks
 
       - name: Install LibActivator
@@ -35,7 +40,7 @@ jobs:
           mkdir -p $HOME/theos/include/libactivator
           cp libactivator/*.h $HOME/theos/include/libactivator/
           mkdir -p $HOME/theos/lib
-          cat > $HOME/theos/lib/libactivator.tbd <<EOF
+          cat > $HOME/theos/lib/libactivator.tbd <<'EOF'
           ---
           archs:           [ arm64, arm64e ]
           platform:        ios
@@ -53,67 +58,14 @@ jobs:
           chmod +x ldid
           sudo mv ldid /usr/local/bin/ldid
 
-      - name: Generate Clean Makefile & Build
+      - name: Build VolumeMixer for iOS 16.0 (arm64e)
         run: |
           export THEOS=$HOME/theos
-          
-          # Viết lại Makefile
-          cat > Makefile <<MAKEFILE_END
-          # Dùng SDK Xcode (latest) để fix lỗi C++
-          TARGET := iphone:clang:latest:14.5
-          ARCHS = arm64e
-          THEOS_PACKAGE_SCHEME = rootless
-          
-          include \$(THEOS)/makefiles/common.mk
-          
-          TWEAK_NAME = VolumeMixer
-          VolumeMixer_FILES = Tweak.xm VMHookInfo.mm VMHookAudioUnit.mm MRYIPC/MRYIPCCenter.m TweakSB.xm VMHUDView.m VMHUDWindow.m VMHUDRootViewController.m VMLAListener.m VMLAVolumeDownListener.m VMLAVolumeUpListener.m
-          
-          # QUAN TRỌNG: Thêm đường dẫn -F trỏ đến thư mục PrivateFrameworks vừa tạo
-          VolumeMixer_CFLAGS = -fobjc-arc -Wno-error -include Prefix.pch
-          VolumeMixer_CCFLAGS = -std=c++17
-          VolumeMixer_LDFLAGS = -lc++ -F\$(THEOS)/lib/PrivateFrameworks
-          
-          VolumeMixer_LIBRARIES = substrate activator
-          VolumeMixer_FRAMEWORKS = UIKit Foundation AudioToolbox CoreMedia AVFoundation
-          VolumeMixer_PRIVATE_FRAMEWORKS = BackBoardServices MediaRemote
-          
-          BUNDLE_NAME = volumemixer CCVolumeMixer
-          
-          volumemixer_FILES = volumemixerpref/VMPrefRootListController.m volumemixerpref/BDInfoListController.m volumemixerpref/VMAuthorListController.m volumemixerpref/VMLicenseViewController.m
-          volumemixer_INSTALL_PATH = /Library/PreferenceBundles
-          volumemixer_FRAMEWORKS = UIKit
-          volumemixer_PRIVATE_FRAMEWORKS = Preferences
-          volumemixer_CFLAGS = -fobjc-arc
-          volumemixer_RESOURCE_DIRS = volumemixerpref/Resources
-          
-          CCVolumeMixer_BUNDLE_EXTENSION = bundle
-          CCVolumeMixer_FILES = ccvolumemixer/CCVolumeMixer.m
-          CCVolumeMixer_CFLAGS = -fobjc-arc
-          CCVolumeMixer_PRIVATE_FRAMEWORKS = ControlCenterUIKit
-          CCVolumeMixer_INSTALL_PATH = /Library/ControlCenter/Bundles/
-          CCVolumeMixer_RESOURCE_DIRS = ccvolumemixer/Resources
-          
-          include \$(THEOS_MAKE_PATH)/tweak.mk
-          include \$(THEOS_MAKE_PATH)/bundle.mk
-          
-          internal-stage::
-          	\$(ECHO_NOTHING)mkdir -p \$(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences\$(ECHO_END)
-          	\$(ECHO_NOTHING)cp volumemixerpref/entry.plist \$(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/volumemixer.plist\$(ECHO_END)
-          
-          after-stage::
-          	\$(ECHO_NOTHING)mkdir -p \$(THEOS_STAGING_DIR)/DEBIAN\$(ECHO_END)
-          	\$(ECHO_NOTHING)chmod 0755 \$(THEOS_STAGING_DIR)/DEBIAN\$(ECHO_END)
-          MAKEFILE_END
-          
-          # Sửa lỗi thụt đầu dòng
-          sed -i '' 's/^          	/	/' Makefile
-          
-          # Build
-          make package FINALPACKAGE=1
-          
+          make clean
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless DEBUG=0
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VolumeMixer_DEB
+          name: VolumeMixer_DEB_iOS16_M2
           path: packages/*.deb
