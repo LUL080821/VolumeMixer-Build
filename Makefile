@@ -1,7 +1,7 @@
 ifdef SIMULATOR
 export TARGET = simulator:clang:latest:8.0
 else
-export TARGET = iphone:clang:latest:7.0
+export TARGET = iphone:clang:latest:16.0
 	ifeq ($(debug),0)
 		export ARCHS = armv7 arm64 arm64e
 	else
@@ -15,7 +15,8 @@ TWEAK_NAME = VolumeMixer
 
 VolumeMixer_FILES = Tweak.xm VMHookInfo.mm VMHookAudioUnit.mm 
 VolumeMixer_FILES += MRYIPC/MRYIPCCenter.m
-VolumeMixer_CFLAGS = -fobjc-arc
+VolumeMixer_CFLAGS = -fobjc-arc -include Prefix.pch
+VolumeMixer_CCFLAGS = -std=c++17
 VolumeMixer_LIBRARIES += substrate
 VolumeMixer_LOGOSFLAGS += -c generator=MobileSubstrate
 
@@ -30,7 +31,7 @@ volumemixer_FILES = volumemixerpref/VMPrefRootListController.m volumemixerpref/B
 volumemixer_INSTALL_PATH = /Library/PreferenceBundles
 volumemixer_FRAMEWORKS = UIKit
 volumemixer_PRIVATE_FRAMEWORKS = Preferences
-volumemixer_CFLAGS = -fobjc-arc
+volumemixer_CFLAGS = -fobjc-arc -include Prefix.pch
 volumemixer_EXTRA_FRAMEWORKS += AltList
 volumemixer_RESOURCE_DIRS = volumemixerpref/Resources
 
