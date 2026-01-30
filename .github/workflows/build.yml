@@ -119,15 +119,14 @@ EOF
             exit 1
           fi
 
-      - name: Build VolumeMixer (iOS 16.0 arm64e Rootless for M2 iPad)
+      - name: Build VolumeMixer (iOS 16.0 arm64e Rootless)
         env:
           THEOS: ${{ env.THEOS }}
         run: |
           export THEOS=$HOME/theos
-          export SDKVERSION=16.0
           
           echo "🔨 Building VolumeMixer for iOS 16.0 arm64e (M2 iPad) with Dopamine2-roothide support..."
-          echo "Configuration:"
+          echo "Configuration from Makefile:"
           echo "  - Architecture: arm64e"
           echo "  - iOS Target: 16.0"
           echo "  - Package Scheme: rootless"
@@ -135,14 +134,8 @@ EOF
           
           make clean || true
           
-          # Build with verbose output
-          make package \
-            FINALPACKAGE=1 \
-            THEOS_PACKAGE_SCHEME=rootless \
-            DEBUG=0 \
-            ARCHS=arm64e \
-            TARGET=iphone:clang:16.5:16.0 \
-            MESSAGES=yes 2>&1 | tee build.log
+          # Build using Makefile settings (no overrides)
+          make package FINALPACKAGE=1 DEBUG=0 MESSAGES=yes 2>&1 | tee build.log
           
           BUILD_STATUS=$?
           echo ""
@@ -187,7 +180,11 @@ EOF
           echo ""
           echo "=== .theos structure ==="
           if [ -d ".theos" ]; then
-            find .theos -type f -name "*.deb" -o -type d | head -20
+            echo "Files in .theos/_/:"
+            find .theos/_ -type f 2>/dev/null | head -20 || echo "No staged files"
+            echo ""
+            echo "Looking for .deb:"
+            find .theos -name "*.deb" 2>/dev/null || echo "No .deb found"
           else
             echo "No .theos directory"
           fi
