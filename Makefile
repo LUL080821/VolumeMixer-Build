@@ -2,8 +2,8 @@ ifdef SIMULATOR
 export TARGET = simulator:clang:latest:8.0
 else
 # iOS 16.0 targeting for M2 iPad with rootless jailbreak
-# Use SDK 16.0 (available in theos/sdks) with minimum deployment target 16.0
-export TARGET = iphone:clang:16.0:16.0
+# Using SDK 16.5 (latest available in theos/sdks) targeting iOS 16.0 minimum
+export TARGET = iphone:clang:16.5:16.0
 export ARCHS = arm64e
 export THEOS_PACKAGE_SCHEME = rootless
 endif
