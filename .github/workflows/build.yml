@@ -14,6 +14,13 @@ jobs:
           git clone --recursive https://github.com/theos/theos.git $HOME/theos
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
 
+      - name: Install iOS SDK
+        run: |
+          # Download iOS SDK from theos-sdks for consistent headers
+          cd $HOME/theos
+          git clone https://github.com/theos/sdks.git sdks
+          echo "✅ Theos SDKs installed"
+
       - name: Install LibActivator Headers
         run: |
           git clone https://github.com/rpetrich/libactivator.git libactivator_src
@@ -27,30 +34,58 @@ jobs:
           chmod +x /tmp/ldid
           sudo mv /tmp/ldid /usr/local/bin/ldid
 
-      - name: Setup Preferences Framework
+      - name: Setup Preferences Framework Headers and Library
         run: |
-          # Find Xcode SDK
+          # Try to get Preferences headers from Xcode SDK first
           XCODE_PATH=$(xcode-select -p)
           XCODE_SDK="$XCODE_PATH/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
           
-          echo "Xcode SDK path: $XCODE_SDK"
+          FOUND_HEADERS=0
           
-          # Copy Preferences headers from Xcode SDK to Theos
+          # Method 1: Try Xcode SDK Headers directory
           if [ -d "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers" ]; then
+            echo "✅ Found Preferences headers in Xcode SDK"
             mkdir -p "$HOME/theos/include/Preferences"
             cp -R "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers/"* "$HOME/theos/include/Preferences/"
-            echo "✅ Preferences headers copied from Xcode SDK"
-          else
-            echo "⚠️  Preferences headers not found in Xcode SDK, checking alternate location"
-            # Try alternate location (some Xcode versions)
-            if [ -d "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework" ]; then
-              find "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework" -name "*.h" -exec cp {} "$HOME/theos/include/Preferences/" \;
-              echo "✅ Preferences headers copied from alternate location"
-            else
-              echo "❌ Preferences framework headers not found"
-              ls -la "$XCODE_SDK/System/Library/PrivateFrameworks/" | grep -i pref || true
-              exit 1
+            FOUND_HEADERS=1
+          fi
+          
+          # Method 2: Try theos-sdks (already cloned)
+          if [ $FOUND_HEADERS -eq 0 ]; then
+            echo "⚠️  Xcode headers not found, checking theos-sdks..."
+            # Find latest SDK in theos/sdks
+            LATEST_SDK=$(ls -d $HOME/theos/sdks/iPhoneOS*.sdk 2>/dev/null | sort -V | tail -1)
+            if [ -n "$LATEST_SDK" ] && [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework" ]; then
+              echo "✅ Found Preferences in theos SDK: $LATEST_SDK"
+              mkdir -p "$HOME/theos/include/Preferences"
+              if [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers" ]; then
+                cp -R "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers/"* "$HOME/theos/include/Preferences/"
+              else
+                # Try copying .h files directly
+                find "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework" -name "*.h" -exec cp {} "$HOME/theos/include/Preferences/" \; 2>/dev/null || true
+              fi
+              FOUND_HEADERS=1
             fi
+          fi
+          
+          # Method 3: Download from iphoneheaders.com or similar (last resort)
+          if [ $FOUND_HEADERS -eq 0 ]; then
+            echo "⚠️  Downloading Preferences headers from public source..."
+            mkdir -p "$HOME/theos/include/Preferences"
+            # Download key headers needed
+            curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSListController.h" -o "$HOME/theos/include/Preferences/PSListController.h" || true
+            curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSSpecifier.h" -o "$HOME/theos/include/Preferences/PSSpecifier.h" || true
+            curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSTableCell.h" -o "$HOME/theos/include/Preferences/PSTableCell.h" || true
+            
+            if [ -f "$HOME/theos/include/Preferences/PSListController.h" ]; then
+              echo "✅ Downloaded Preferences headers from GitHub"
+              FOUND_HEADERS=1
+            fi
+          fi
+          
+          if [ $FOUND_HEADERS -eq 0 ]; then
+            echo "❌ Failed to find Preferences headers from any source"
+            exit 1
           fi
           
           # Copy local Preferences.tbd for linking
@@ -59,9 +94,16 @@ jobs:
             cp theos/lib/Preferences.tbd "$HOME/theos/lib/"
             echo "✅ Preferences.tbd copied for linking"
           else
-            echo "❌ theos/lib/Preferences.tbd not found"
+            echo "❌ theos/lib/Preferences.tbd not found in repo"
             exit 1
           fi
+          
+          # Verify setup
+          echo ""
+          echo "Preferences setup complete:"
+          ls -la "$HOME/theos/include/Preferences/" | head -10
+          echo ""
+          ls -la "$HOME/theos/lib/Preferences.tbd"
 
       - name: Build VolumeMixer (arm64e for M2)
         env:
