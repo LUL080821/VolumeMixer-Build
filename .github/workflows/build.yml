@@ -29,13 +29,37 @@ jobs:
 
       - name: Setup Preferences Framework
         run: |
-          # Copy local Preferences.tbd stub to global Theos lib
-          mkdir -p $HOME/theos/lib
-          if [ -f "theos/lib/Preferences.tbd" ]; then
-            cp theos/lib/Preferences.tbd $HOME/theos/lib/
-            echo "✅ Preferences.tbd copied to $HOME/theos/lib"
+          # Find Xcode SDK
+          XCODE_PATH=$(xcode-select -p)
+          XCODE_SDK="$XCODE_PATH/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
+          
+          echo "Xcode SDK path: $XCODE_SDK"
+          
+          # Copy Preferences headers from Xcode SDK to Theos
+          if [ -d "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers" ]; then
+            mkdir -p "$HOME/theos/include/Preferences"
+            cp -R "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers/"* "$HOME/theos/include/Preferences/"
+            echo "✅ Preferences headers copied from Xcode SDK"
           else
-            echo "❌ theos/lib/Preferences.tbd not found in repo"
+            echo "⚠️  Preferences headers not found in Xcode SDK, checking alternate location"
+            # Try alternate location (some Xcode versions)
+            if [ -d "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework" ]; then
+              find "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework" -name "*.h" -exec cp {} "$HOME/theos/include/Preferences/" \;
+              echo "✅ Preferences headers copied from alternate location"
+            else
+              echo "❌ Preferences framework headers not found"
+              ls -la "$XCODE_SDK/System/Library/PrivateFrameworks/" | grep -i pref || true
+              exit 1
+            fi
+          fi
+          
+          # Copy local Preferences.tbd for linking
+          mkdir -p "$HOME/theos/lib"
+          if [ -f "theos/lib/Preferences.tbd" ]; then
+            cp theos/lib/Preferences.tbd "$HOME/theos/lib/"
+            echo "✅ Preferences.tbd copied for linking"
+          else
+            echo "❌ theos/lib/Preferences.tbd not found"
             exit 1
           fi
 
