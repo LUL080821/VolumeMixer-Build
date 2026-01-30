@@ -22,6 +22,7 @@ jobs:
           mv sdks-master sdks
           rm master.zip
           echo "✅ Theos SDKs installed"
+          ls -la sdks/ | head -10
 
       - name: Install LibActivator Headers
         run: |
@@ -62,6 +63,7 @@ EOF
           curl -L https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_macosx_x86_64 -o /tmp/ldid
           chmod +x /tmp/ldid
           sudo mv /tmp/ldid /usr/local/bin/ldid
+          ldid -V || echo "ldid version check failed"
           echo "✅ ldid installed"
 
       - name: Setup Preferences Framework
@@ -117,70 +119,114 @@ EOF
             exit 1
           fi
 
-      - name: Build VolumeMixer (arm64e for M2)
+      - name: Build VolumeMixer (iOS 16.0 arm64e Rootless for M2 iPad)
         env:
           THEOS: ${{ env.THEOS }}
         run: |
           export THEOS=$HOME/theos
           export SDKVERSION=16.0
           
+          echo "🔨 Building VolumeMixer for iOS 16.0 arm64e (M2 iPad) with Dopamine2-roothide support..."
+          echo "Configuration:"
+          echo "  - Architecture: arm64e"
+          echo "  - iOS Target: 16.0"
+          echo "  - Package Scheme: rootless"
+          echo ""
+          
           make clean || true
           
+          # Build with verbose output
           make package \
             FINALPACKAGE=1 \
             THEOS_PACKAGE_SCHEME=rootless \
             DEBUG=0 \
             ARCHS=arm64e \
-            TARGET=iphone:clang:latest:16.0
-
-      - name: Find and Display Build Output
-        run: |
-          echo "📦 Searching for built packages..."
-          echo ""
-          echo "=== Contents of current directory ==="
-          ls -la
-          echo ""
-          echo "=== Searching for .deb files recursively ==="
-          find . -name "*.deb" -type f
-          echo ""
-          echo "=== Contents of packages/ directory ==="
-          ls -lah packages/ 2>/dev/null || echo "No packages/ directory found"
-          echo ""
-          echo "=== Contents of .theos/ directory ==="
-          ls -lah .theos/ 2>/dev/null || echo "No .theos/ directory"
-          echo ""
-          if [ -d ".theos" ]; then
-            echo "=== Looking for packages in .theos subdirectories ==="
-            find .theos -name "*.deb" -type f 2>/dev/null || echo "No .deb in .theos"
-          fi
-          echo ""
-          echo "=== Checking for dpkg output ==="
-          ls -lah *.deb 2>/dev/null || echo "No .deb in root"
-
-      - name: Copy DEB to packages directory
-        run: |
-          mkdir -p packages
+            TARGET=iphone:clang:16.5:16.0 \
+            MESSAGES=yes 2>&1 | tee build.log
           
-          # Find all .deb files and copy to packages/
-          FOUND_DEB=0
+          BUILD_STATUS=$?
+          echo ""
+          if [ $BUILD_STATUS -eq 0 ]; then
+            echo "✅ Build completed successfully"
+          else
+            echo "❌ Build failed with status $BUILD_STATUS"
+            echo "Showing last 50 lines of build log:"
+            tail -50 build.log
+            exit $BUILD_STATUS
+          fi
+
+      - name: Locate and Verify Package
+        run: |
+          echo "📦 Locating built package..."
+          echo ""
+          
+          # Standard package location
+          if [ -d "packages" ]; then
+            echo "=== packages/ directory ==="
+            ls -lah packages/
+            
+            PACKAGE_FILE=$(find packages -name "*.deb" -type f | head -1)
+            if [ -n "$PACKAGE_FILE" ]; then
+              echo ""
+              echo "✅ Package found: $PACKAGE_FILE"
+              echo ""
+              echo "Package info:"
+              dpkg-deb --info "$PACKAGE_FILE"
+              echo ""
+              echo "Package contents (first 30 files):"
+              dpkg-deb --contents "$PACKAGE_FILE" | head -30
+            fi
+          else
+            echo "⚠️  No packages/ directory found"
+          fi
+          
+          echo ""
+          echo "=== All .deb files in project ==="
+          find . -name "*.deb" -type f -exec ls -lh {} \;
+          
+          echo ""
+          echo "=== .theos structure ==="
+          if [ -d ".theos" ]; then
+            find .theos -type f -name "*.deb" -o -type d | head -20
+          else
+            echo "No .theos directory"
+          fi
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p artifacts
+          
+          # Find and copy all .deb files
+          FOUND_COUNT=0
           for deb in $(find . -name "*.deb" -type f 2>/dev/null); do
-            echo "📦 Found: $deb"
-            cp "$deb" packages/
-            FOUND_DEB=1
+            echo "📦 Copying: $deb"
+            cp "$deb" artifacts/
+            FOUND_COUNT=$((FOUND_COUNT + 1))
           done
           
-          if [ $FOUND_DEB -eq 0 ]; then
-            echo "❌ No .deb files found!"
+          if [ $FOUND_COUNT -eq 0 ]; then
+            echo "❌ ERROR: No .deb files found!"
+            echo "Build may have failed. Check build logs above."
             exit 1
           fi
           
           echo ""
-          echo "✅ Final packages directory:"
-          ls -lah packages/
+          echo "✅ Prepared $FOUND_COUNT package(s)"
+          ls -lah artifacts/
 
-      - name: Upload Artifact
+      - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
-          name: VolumeMixer_DEB_iOS16
-          path: packages/*.deb
+          name: VolumeMixer_iOS16_arm64e_rootless_M2
+          path: artifacts/*.deb
           if-no-files-found: error
+
+      - name: Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build.log
+            .theos/_/DEBIAN/control
+          if-no-files-found: ignore
