@@ -33,6 +33,10 @@ volumemixer_FRAMEWORKS = UIKit
 volumemixer_LIBRARIES = Preferences
 volumemixer_CFLAGS = -fobjc-arc -include Prefix.pch -Wno-error -Wno-unused-variable
 volumemixer_EXTRA_FRAMEWORKS += AltList
+# CRITICAL: Add rpath for rootless jailbreak to find AltList framework at runtime
+# On Dopamine2-roothide, frameworks are installed at /var/jb/Library/Frameworks/
+# This allows @rpath/AltList.framework/AltList to resolve correctly
+volumemixer_LDFLAGS = -rpath /var/jb/Library/Frameworks -rpath @loader_path/Frameworks
 volumemixer_RESOURCE_DIRS = volumemixerpref/Resources
 
 CCVolumeMixer_BUNDLE_EXTENSION = bundle
