@@ -1,0 +1,99 @@
+name: Build with dpkg (Alternative)
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dpkg first
+        run: |
+          echo "📦 Installing dpkg-deb before Theos setup"
+          brew install dpkg
+          which dpkg-deb
+          dpkg-deb --version
+
+      - name: Install Theos
+        run: |
+          git clone --recursive https://github.com/theos/theos.git $HOME/theos
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "PATH=/usr/local/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Install iOS SDK
+        run: |
+          cd $HOME/theos
+          curl -LO https://github.com/theos/sdks/archive/master.zip
+          unzip -q master.zip
+          mv sdks-master sdks
+          rm master.zip
+          echo "✅ iOS SDKs installed"
+
+      - name: Install Dependencies
+        run: |
+          # LibActivator
+          git clone --depth=1 https://github.com/rpetrich/libactivator.git libactivator_src
+          mkdir -p $HOME/theos/include/libactivator
+          cp libactivator_src/*.h $HOME/theos/include/libactivator/ 2>/dev/null || true
+          rm -rf libactivator_src
+          
+          # AltList
+          git clone --depth=1 https://github.com/opa334/AltList.git altlist_src
+          mkdir -p $HOME/theos/include/AltList
+          find altlist_src -name "*.h" -exec cp {} $HOME/theos/include/AltList/ \; 2>/dev/null || true
+          mkdir -p $HOME/theos/lib
+          cat > $HOME/theos/lib/AltList.tbd << 'EOF'
+---
+archs:           [ arm64, arm64e ]
+platform:        ios
+install-name:    /Library/Frameworks/AltList.framework/AltList
+exports:
+  - archs:           [ arm64, arm64e ]
+    symbols:         [ _OBJC_CLASS_$_ATLApplicationListController ]
+EOF
+          rm -rf altlist_src
+          
+          # Ldid
+          curl -L https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_macosx_x86_64 -o /tmp/ldid
+          chmod +x /tmp/ldid
+          sudo mv /tmp/ldid /usr/local/bin/ldid
+          
+          # Preferences
+          mkdir -p "$HOME/theos/lib" "$HOME/theos/include/Preferences"
+          if [ -f "theos/lib/Preferences.tbd" ]; then
+            cp theos/lib/Preferences.tbd "$HOME/theos/lib/"
+          fi
+          for header in PSListController.h PSSpecifier.h PSTableCell.h PSViewController.h; do
+            curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/$header" \
+              -o "$HOME/theos/include/Preferences/$header" || true
+          done
+          
+          echo "✅ All dependencies installed"
+
+      - name: Build Package
+        run: |
+          export THEOS=$HOME/theos
+          export PATH="/usr/local/bin:$PATH"
+          
+          echo "🔨 Building for iPad M2 iOS 16.0 (Dopamine2-roothide)"
+          echo "Architecture: arm64e | Package: rootless"
+          
+          make clean || true
+          make package FINALPACKAGE=1 DEBUG=0 THEOS_PACKAGE_SCHEME=rootless
+          
+          echo ""
+          echo "📦 Package files:"
+          find . -name "*.deb" -exec ls -lh {} \;
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VolumeMixer-deb-with-dpkg
+          path: |
+            packages/*.deb
+            .theos/packages/*.deb
+            **/*.deb
+          if-no-files-found: error
