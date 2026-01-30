@@ -33,10 +33,8 @@ jobs:
 
       - name: Install AltList Framework
         run: |
-          # Clone AltList repository
           git clone https://github.com/opa334/AltList.git altlist_src
           
-          # Copy headers
           mkdir -p $HOME/theos/include/AltList
           if [ -d "altlist_src/AltList" ]; then
             cp altlist_src/AltList/*.h $HOME/theos/include/AltList/ 2>/dev/null || true
@@ -45,7 +43,6 @@ jobs:
             find altlist_src -name "*.h" -exec cp {} $HOME/theos/include/AltList/ \; 2>/dev/null || true
           fi
           
-          # Create stub .tbd for linking
           mkdir -p $HOME/theos/lib
           cat > $HOME/theos/lib/AltList.tbd << 'EOF'
 ---
@@ -71,12 +68,10 @@ EOF
         run: |
           FOUND_HEADERS=0
           
-          # Try theos-sdks first (most reliable)
           LATEST_SDK=$(ls -d $HOME/theos/sdks/iPhoneOS*.sdk 2>/dev/null | sort -V | tail -1)
           if [ -n "$LATEST_SDK" ]; then
             echo "📦 Using SDK: $LATEST_SDK"
             
-            # Copy Preferences headers
             if [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework" ]; then
               mkdir -p "$HOME/theos/include/Preferences"
               
@@ -92,7 +87,6 @@ EOF
             fi
           fi
           
-          # Fallback: Download from theos/headers repository
           if [ $FOUND_HEADERS -eq 0 ]; then
             echo "⚠️  Downloading Preferences headers from GitHub..."
             mkdir -p "$HOME/theos/include/Preferences"
@@ -114,7 +108,6 @@ EOF
           
           echo "✅ Preferences headers installed"
           
-          # Copy Preferences.tbd for linking
           mkdir -p "$HOME/theos/lib"
           if [ -f "theos/lib/Preferences.tbd" ]; then
             cp theos/lib/Preferences.tbd "$HOME/theos/lib/"
@@ -123,11 +116,6 @@ EOF
             echo "❌ Preferences.tbd not found in repo"
             exit 1
           fi
-          
-          # Verify
-          echo ""
-          echo "📋 Installed headers:"
-          ls -la "$HOME/theos/include/Preferences/" | head -10
 
       - name: Build VolumeMixer (arm64e for M2)
         env:
@@ -145,21 +133,54 @@ EOF
             ARCHS=arm64e \
             TARGET=iphone:clang:latest:16.0
 
-      - name: Check Build Output
+      - name: Find and Display Build Output
         run: |
-          echo "📦 Build artifacts:"
-          ls -lah packages/ 2>/dev/null || echo "No packages directory"
+          echo "📦 Searching for built packages..."
           echo ""
-          if [ -f packages/*.deb ]; then
-            echo "✅ DEB file created successfully!"
-            ls -lh packages/*.deb
-          else
-            echo "❌ No DEB file found"
+          echo "=== Contents of current directory ==="
+          ls -la
+          echo ""
+          echo "=== Searching for .deb files recursively ==="
+          find . -name "*.deb" -type f
+          echo ""
+          echo "=== Contents of packages/ directory ==="
+          ls -lah packages/ 2>/dev/null || echo "No packages/ directory found"
+          echo ""
+          echo "=== Contents of .theos/ directory ==="
+          ls -lah .theos/ 2>/dev/null || echo "No .theos/ directory"
+          echo ""
+          if [ -d ".theos" ]; then
+            echo "=== Looking for packages in .theos subdirectories ==="
+            find .theos -name "*.deb" -type f 2>/dev/null || echo "No .deb in .theos"
           fi
+          echo ""
+          echo "=== Checking for dpkg output ==="
+          ls -lah *.deb 2>/dev/null || echo "No .deb in root"
+
+      - name: Copy DEB to packages directory
+        run: |
+          mkdir -p packages
+          
+          # Find all .deb files and copy to packages/
+          FOUND_DEB=0
+          for deb in $(find . -name "*.deb" -type f 2>/dev/null); do
+            echo "📦 Found: $deb"
+            cp "$deb" packages/
+            FOUND_DEB=1
+          done
+          
+          if [ $FOUND_DEB -eq 0 ]; then
+            echo "❌ No .deb files found!"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ Final packages directory:"
+          ls -lah packages/
 
       - name: Upload Artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: VolumeMixer_DEB_iOS16
           path: packages/*.deb
+          if-no-files-found: error
