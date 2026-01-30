@@ -16,9 +16,11 @@ jobs:
 
       - name: Install iOS SDK
         run: |
-          # Download iOS SDK from theos-sdks for consistent headers
           cd $HOME/theos
-          git clone https://github.com/theos/sdks.git sdks
+          curl -LO https://github.com/theos/sdks/archive/master.zip
+          unzip master.zip
+          mv sdks-master sdks
+          rm master.zip
           echo "✅ Theos SDKs installed"
 
       - name: Install LibActivator Headers
@@ -27,83 +29,105 @@ jobs:
           mkdir -p $HOME/theos/include/libactivator
           cp libactivator_src/*.h $HOME/theos/include/libactivator/ 2>/dev/null || true
           rm -rf libactivator_src
+          echo "✅ LibActivator headers installed"
+
+      - name: Install AltList Framework
+        run: |
+          # Clone AltList repository
+          git clone https://github.com/opa334/AltList.git altlist_src
+          
+          # Copy headers
+          mkdir -p $HOME/theos/include/AltList
+          if [ -d "altlist_src/AltList" ]; then
+            cp altlist_src/AltList/*.h $HOME/theos/include/AltList/ 2>/dev/null || true
+          fi
+          if [ -d "altlist_src" ]; then
+            find altlist_src -name "*.h" -exec cp {} $HOME/theos/include/AltList/ \; 2>/dev/null || true
+          fi
+          
+          # Create stub .tbd for linking
+          mkdir -p $HOME/theos/lib
+          cat > $HOME/theos/lib/AltList.tbd << 'EOF'
+---
+archs:           [ arm64, arm64e ]
+platform:        ios
+install-name:    /Library/Frameworks/AltList.framework/AltList
+exports:
+  - archs:           [ arm64, arm64e ]
+    symbols:         [ _OBJC_CLASS_$_ATLApplicationListController ]
+EOF
+          
+          rm -rf altlist_src
+          echo "✅ AltList framework installed"
 
       - name: Install Ldid
         run: |
           curl -L https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_macosx_x86_64 -o /tmp/ldid
           chmod +x /tmp/ldid
           sudo mv /tmp/ldid /usr/local/bin/ldid
+          echo "✅ ldid installed"
 
-      - name: Setup Preferences Framework Headers and Library
+      - name: Setup Preferences Framework
         run: |
-          # Try to get Preferences headers from Xcode SDK first
-          XCODE_PATH=$(xcode-select -p)
-          XCODE_SDK="$XCODE_PATH/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
-          
           FOUND_HEADERS=0
           
-          # Method 1: Try Xcode SDK Headers directory
-          if [ -d "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers" ]; then
-            echo "✅ Found Preferences headers in Xcode SDK"
-            mkdir -p "$HOME/theos/include/Preferences"
-            cp -R "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers/"* "$HOME/theos/include/Preferences/"
-            FOUND_HEADERS=1
-          fi
-          
-          # Method 2: Try theos-sdks (already cloned)
-          if [ $FOUND_HEADERS -eq 0 ]; then
-            echo "⚠️  Xcode headers not found, checking theos-sdks..."
-            # Find latest SDK in theos/sdks
-            LATEST_SDK=$(ls -d $HOME/theos/sdks/iPhoneOS*.sdk 2>/dev/null | sort -V | tail -1)
-            if [ -n "$LATEST_SDK" ] && [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework" ]; then
-              echo "✅ Found Preferences in theos SDK: $LATEST_SDK"
+          # Try theos-sdks first (most reliable)
+          LATEST_SDK=$(ls -d $HOME/theos/sdks/iPhoneOS*.sdk 2>/dev/null | sort -V | tail -1)
+          if [ -n "$LATEST_SDK" ]; then
+            echo "📦 Using SDK: $LATEST_SDK"
+            
+            # Copy Preferences headers
+            if [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework" ]; then
               mkdir -p "$HOME/theos/include/Preferences"
+              
               if [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers" ]; then
                 cp -R "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers/"* "$HOME/theos/include/Preferences/"
+                FOUND_HEADERS=1
               else
-                # Try copying .h files directly
-                find "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework" -name "*.h" -exec cp {} "$HOME/theos/include/Preferences/" \; 2>/dev/null || true
+                find "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework" -name "*.h" -exec cp {} "$HOME/theos/include/Preferences/" \; 2>/dev/null
+                if [ -f "$HOME/theos/include/Preferences/PSListController.h" ]; then
+                  FOUND_HEADERS=1
+                fi
               fi
-              FOUND_HEADERS=1
             fi
           fi
           
-          # Method 3: Download from iphoneheaders.com or similar (last resort)
+          # Fallback: Download from theos/headers repository
           if [ $FOUND_HEADERS -eq 0 ]; then
-            echo "⚠️  Downloading Preferences headers from public source..."
+            echo "⚠️  Downloading Preferences headers from GitHub..."
             mkdir -p "$HOME/theos/include/Preferences"
-            # Download key headers needed
+            
             curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSListController.h" -o "$HOME/theos/include/Preferences/PSListController.h" || true
             curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSSpecifier.h" -o "$HOME/theos/include/Preferences/PSSpecifier.h" || true
             curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSTableCell.h" -o "$HOME/theos/include/Preferences/PSTableCell.h" || true
+            curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSViewController.h" -o "$HOME/theos/include/Preferences/PSViewController.h" || true
             
             if [ -f "$HOME/theos/include/Preferences/PSListController.h" ]; then
-              echo "✅ Downloaded Preferences headers from GitHub"
               FOUND_HEADERS=1
             fi
           fi
           
           if [ $FOUND_HEADERS -eq 0 ]; then
-            echo "❌ Failed to find Preferences headers from any source"
+            echo "❌ Failed to get Preferences headers"
             exit 1
           fi
           
-          # Copy local Preferences.tbd for linking
+          echo "✅ Preferences headers installed"
+          
+          # Copy Preferences.tbd for linking
           mkdir -p "$HOME/theos/lib"
           if [ -f "theos/lib/Preferences.tbd" ]; then
             cp theos/lib/Preferences.tbd "$HOME/theos/lib/"
-            echo "✅ Preferences.tbd copied for linking"
+            echo "✅ Preferences.tbd copied"
           else
-            echo "❌ theos/lib/Preferences.tbd not found in repo"
+            echo "❌ Preferences.tbd not found in repo"
             exit 1
           fi
           
-          # Verify setup
+          # Verify
           echo ""
-          echo "Preferences setup complete:"
+          echo "📋 Installed headers:"
           ls -la "$HOME/theos/include/Preferences/" | head -10
-          echo ""
-          ls -la "$HOME/theos/lib/Preferences.tbd"
 
       - name: Build VolumeMixer (arm64e for M2)
         env:
@@ -112,10 +136,8 @@ jobs:
           export THEOS=$HOME/theos
           export SDKVERSION=16.0
           
-          # Clean previous builds
           make clean || true
           
-          # Build with explicit flags for iOS 16 / arm64e
           make package \
             FINALPACKAGE=1 \
             THEOS_PACKAGE_SCHEME=rootless \
@@ -125,11 +147,15 @@ jobs:
 
       - name: Check Build Output
         run: |
-          echo "Contents of packages directory:"
+          echo "📦 Build artifacts:"
           ls -lah packages/ 2>/dev/null || echo "No packages directory"
           echo ""
-          echo "Contents of .theos directory:"
-          ls -lah .theos/obj/ 2>/dev/null || echo "No .theos/obj directory"
+          if [ -f packages/*.deb ]; then
+            echo "✅ DEB file created successfully!"
+            ls -lh packages/*.deb
+          else
+            echo "❌ No DEB file found"
+          fi
 
       - name: Upload Artifact
         if: success()
