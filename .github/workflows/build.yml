@@ -9,10 +9,19 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install dpkg (Critical for packaging)
+        run: |
+          echo "📦 Installing dpkg for .deb package creation..."
+          brew install dpkg
+          which dpkg-deb
+          dpkg-deb --version
+          echo "✅ dpkg-deb installed and verified"
+
       - name: Install Theos
         run: |
           git clone --recursive https://github.com/theos/theos.git $HOME/theos
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          echo "✅ Theos installed"
 
       - name: Install iOS SDK
         run: |
@@ -67,7 +76,7 @@ EOF
             cp theos/lib/Preferences.tbd "$HOME/theos/lib/"
             echo "✅ Preferences.tbd copied from repo"
           else
-            echo "⚠️ Preferences.tbd not found in repo, creating minimal version"
+            echo "⚠️ Creating minimal Preferences.tbd"
             cat > "$HOME/theos/lib/Preferences.tbd" << 'EOF'
 ---
 archs:           [ arm64, arm64e ]
@@ -104,14 +113,21 @@ EOF
           echo "🔨 Building VolumeMixer for iOS 16.0 arm64e (M2 iPad Dopamine2-roothide)"
           echo "📍 Working directory: $(pwd)"
           echo "📍 THEOS: $THEOS"
+          echo "📍 dpkg-deb: $(which dpkg-deb)"
           echo ""
+          
+          # Verify dpkg-deb is available
+          if ! command -v dpkg-deb &> /dev/null; then
+            echo "❌ CRITICAL: dpkg-deb not found!"
+            exit 1
+          fi
           
           # Clean previous builds
           make clean || true
           rm -rf packages .theos/_/packages 2>/dev/null || true
           
-          # Build with explicit package generation
-          echo "🔧 Running: make package FINALPACKAGE=1 DEBUG=0"
+          # Build with explicit settings for iOS 16.0 rootless
+          echo "🔧 Building with: make package FINALPACKAGE=1 DEBUG=0"
           make package FINALPACKAGE=1 DEBUG=0 MESSAGES=yes 2>&1 | tee build.log
           
           BUILD_STATUS=${PIPESTATUS[0]}
@@ -123,98 +139,65 @@ EOF
             exit $BUILD_STATUS
           fi
           
-          echo "✅ Build command completed"
+          echo "✅ Build command completed successfully"
 
-      - name: Locate and Verify Package
+      - name: Verify Package Generation
         run: |
-          echo "📦 Searching for generated .deb packages..."
+          echo "📦 Verifying generated .deb packages..."
           echo ""
           
-          # Check all possible locations
-          echo "=== Searching in packages/ ==="
-          if [ -d "packages" ]; then
-            find packages -name "*.deb" -type f -exec ls -lh {} \; || echo "No .deb in packages/"
-          else
-            echo "❌ packages/ directory does not exist"
-          fi
-          
-          echo ""
-          echo "=== Searching in .theos/ ==="
-          if [ -d ".theos" ]; then
-            find .theos -name "*.deb" -type f -exec ls -lh {} \; || echo "No .deb in .theos/"
-          else
-            echo "❌ .theos/ directory does not exist"
-          fi
-          
-          echo ""
-          echo "=== Searching entire project ==="
+          # Search for .deb files in all possible locations
           FOUND_DEBS=$(find . -name "*.deb" -type f 2>/dev/null)
+          
           if [ -z "$FOUND_DEBS" ]; then
-            echo "❌ CRITICAL: No .deb files found anywhere!"
+            echo "❌ CRITICAL ERROR: No .deb files were generated!"
             echo ""
-            echo "=== Checking THEOS staging directory ==="
+            echo "=== Checking build staging directory ==="
             if [ -d ".theos/_" ]; then
-              echo "Files in .theos/_/:"
-              find .theos/_ -type f 2>/dev/null | head -30
+              echo "Contents of .theos/_:"
+              ls -lah .theos/_/
               echo ""
               if [ -f ".theos/_/DEBIAN/control" ]; then
-                echo "control file exists:"
+                echo "DEBIAN/control exists:"
                 cat .theos/_/DEBIAN/control
               else
-                echo "❌ No DEBIAN/control file - packaging didn't start"
+                echo "❌ No DEBIAN/control file found"
               fi
+            else
+              echo "❌ .theos/_ directory doesn't exist"
             fi
             echo ""
-            echo "=== Checking if dpkg-deb is available ==="
-            which dpkg-deb || echo "❌ dpkg-deb not found"
-            brew list | grep dpkg || echo "dpkg not installed via brew"
+            echo "=== Build log tail ==="
+            tail -50 build.log
             exit 1
           else
-            echo "✅ Found .deb files:"
+            echo "✅ Successfully found .deb package(s):"
             echo "$FOUND_DEBS" | while read deb; do
               echo ""
               echo "📦 Package: $deb"
               ls -lh "$deb"
-              if command -v dpkg-deb &> /dev/null; then
-                echo "Package info:"
-                dpkg-deb --info "$deb" 2>/dev/null || echo "(dpkg-deb info unavailable)"
-              fi
+              echo "Package info:"
+              dpkg-deb --info "$deb" || echo "(Info unavailable)"
+              echo "Package contents:"
+              dpkg-deb --contents "$deb" | head -20
             done
           fi
-
-      - name: Install dpkg tools
-        if: failure()
-        run: |
-          echo "Installing dpkg for packaging..."
-          brew install dpkg
-
-      - name: Retry Package Build with dpkg
-        if: failure()
-        run: |
-          export THEOS=$HOME/theos
-          export PATH="/usr/local/bin:$PATH"
-          echo "🔄 Retrying package build with dpkg installed..."
-          make package FINALPACKAGE=1 DEBUG=0
 
       - name: Prepare Artifacts
         run: |
           mkdir -p artifacts
           
-          # Find and copy all .deb files from all locations
+          # Copy all .deb files to artifacts directory
           FOUND_COUNT=0
-          for location in packages .theos/packages .theos .; do
-            if [ -d "$location" ]; then
-              for deb in $(find "$location" -maxdepth 2 -name "*.deb" -type f 2>/dev/null); do
-                echo "📦 Copying: $deb -> artifacts/"
-                cp "$deb" artifacts/
-                FOUND_COUNT=$((FOUND_COUNT + 1))
-              done
-            fi
+          for deb in $(find . -name "*.deb" -type f 2>/dev/null); do
+            BASENAME=$(basename "$deb")
+            echo "📦 Copying: $deb -> artifacts/$BASENAME"
+            cp "$deb" "artifacts/$BASENAME"
+            FOUND_COUNT=$((FOUND_COUNT + 1))
           done
           
           if [ $FOUND_COUNT -eq 0 ]; then
-            echo "❌ ERROR: No .deb files found to upload!"
-            echo "This should not happen if previous steps passed."
+            echo "❌ ERROR: No .deb files to upload!"
             exit 1
           fi
           
@@ -228,6 +211,7 @@ EOF
           name: VolumeMixer-iOS16-arm64e-rootless-M2
           path: artifacts/*.deb
           if-no-files-found: error
+          retention-days: 90
 
       - name: Upload Build Logs
         if: always()
@@ -238,3 +222,4 @@ EOF
             build.log
             .theos/_/DEBIAN/control
           if-no-files-found: ignore
+          retention-days: 30
