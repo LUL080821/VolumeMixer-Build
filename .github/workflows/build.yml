@@ -29,32 +29,19 @@ jobs:
           echo "📦 Downloading and installing iOS SDK 16.5..."
           cd $HOME/theos
           
-          # Create sdks directory
           mkdir -p sdks
-          
-          # Download the specific SDK in tar.xz format (more reliable than zip)
           echo "Downloading iPhoneOS16.5.sdk.tar.xz..."
           curl -L https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz -o sdks/iPhoneOS16.5.sdk.tar.xz
           
-          # Extract the SDK
           echo "Extracting SDK..."
           cd sdks
           tar -xf iPhoneOS16.5.sdk.tar.xz
           rm iPhoneOS16.5.sdk.tar.xz
           
-          # Verify SDK exists
-          echo ""
-          echo "Available SDKs:"
-          ls -la
-          echo ""
-          
           if [ ! -d "iPhoneOS16.5.sdk" ]; then
-            echo "❌ ERROR: iPhoneOS16.5.sdk not found after extraction!"
-            echo "Contents of sdks directory:"
-            ls -la
+            echo "❌ ERROR: iPhoneOS16.5.sdk not found!"
             exit 1
           fi
-          
           echo "✅ iPhoneOS16.5.sdk verified and installed"
 
       - name: Install LibActivator Headers
@@ -65,7 +52,7 @@ jobs:
           rm -rf libactivator_src
           echo "✅ LibActivator headers installed"
 
-      - name: Install AltList Framework (CRITICAL FIX)
+      - name: Install AltList Framework (ROOTLESS FIX)
         run: |
           git clone --depth=1 https://github.com/opa334/AltList.git altlist_src
           
@@ -73,32 +60,27 @@ jobs:
           mkdir -p $HOME/theos/include/AltList
           find altlist_src -name "*.h" -exec cp {} $HOME/theos/include/AltList/ \; 2>/dev/null || true
           
-          # CRITICAL: Create framework structure in rootless directory
-          # The Makefile uses "volumemixer_EXTRA_FRAMEWORKS += AltList" which means
-          # the linker searches with "-framework AltList" flag, looking for:
-          # AltList.framework/AltList in framework search paths (-F directories)
-          
-          echo "🔧 Creating AltList.framework structure in rootless directory..."
+          # CRITICAL: Create framework structure for rootless jailbreak
+          # Use @rpath for dynamic loading on rootless systems
+          echo "🔧 Creating AltList.framework for rootless jailbreak..."
           mkdir -p "$HOME/theos/lib/iphone/rootless/AltList.framework"
           
-          # Create the framework's main binary file (AltList.tbd)
+          # Create TBD with @rpath install-name for rootless compatibility
+          # The bundle will have rpath set to /var/jb/Library/Frameworks
+          # So @rpath/AltList.framework/AltList resolves to /var/jb/Library/Frameworks/AltList.framework/AltList
           echo "---" > "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
           echo "archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
           echo "platform:        ios" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
-          echo "install-name:    /Library/Frameworks/AltList.framework/AltList" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          echo "install-name:    @rpath/AltList.framework/AltList" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
           echo "exports:" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
           echo "  - archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
           echo "    symbols:         [ _OBJC_CLASS_\$_ATLApplicationListController ]" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
           echo "..." >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
           
-          # Verify framework structure
-          echo ""
-          echo "📁 AltList.framework structure:"
-          ls -lah "$HOME/theos/lib/iphone/rootless/AltList.framework/"
-          echo ""
+          echo "✅ AltList.framework created with @rpath for rootless"
+          cat "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
           
           rm -rf altlist_src
-          echo "✅ AltList framework installed in rootless directory"
 
       - name: Install Ldid
         run: |
@@ -110,16 +92,13 @@ jobs:
 
       - name: Setup Preferences Framework
         run: |
-          # Create rootless lib directory
-          echo "🔧 Creating rootless lib directory..."
           mkdir -p "$HOME/theos/lib/iphone/rootless"
           
-          # Copy repo's Preferences.tbd if it exists, otherwise create it
           if [ -f "theos/lib/Preferences.tbd" ]; then
             echo "✅ Using Preferences.tbd from repository"
             cp theos/lib/Preferences.tbd "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
           else
-            echo "⚠️ Creating Preferences.tbd in rootless directory"
+            echo "⚠️ Creating Preferences.tbd"
             echo "---" > "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
             echo "archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
             echo "platform:        ios" >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
@@ -130,35 +109,19 @@ jobs:
             echo "..." >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
           fi
           
-          # Create libPreferences.tbd symlink in rootless directory
           cd "$HOME/theos/lib/iphone/rootless"
           ln -sf Preferences.tbd libPreferences.tbd
-          echo "✅ Created libPreferences.tbd symlink in rootless directory"
+          echo "✅ Preferences framework ready"
           
-          # Verify both files exist in rootless directory
-          echo ""
-          echo "📁 Contents of rootless lib directory:"
-          ls -lah "$HOME/theos/lib/iphone/rootless/" | grep -i preferences
-          echo ""
-          
-          # Setup Preferences headers
           mkdir -p "$HOME/theos/include/Preferences"
           LATEST_SDK=$(ls -d $HOME/theos/sdks/iPhoneOS*.sdk 2>/dev/null | sort -V | tail -1)
           if [ -n "$LATEST_SDK" ] && [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers" ]; then
             cp -R "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers/"* "$HOME/theos/include/Preferences/"
-            echo "✅ Preferences headers from SDK"
           else
-            echo "⚠️ Downloading Preferences headers from GitHub"
             for header in PSListController.h PSSpecifier.h PSTableCell.h PSViewController.h; do
               curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/$header" -o "$HOME/theos/include/Preferences/$header" || true
             done
           fi
-          
-          if [ ! -f "$HOME/theos/include/Preferences/PSListController.h" ]; then
-            echo "❌ Failed to get Preferences headers"
-            exit 1
-          fi
-          echo "✅ Preferences framework ready"
 
       - name: Build VolumeMixer (iOS 16.0 arm64e Rootless)
         env:
@@ -168,127 +131,53 @@ jobs:
           export PATH="/usr/local/bin:$PATH"
           
           echo "🔨 Building VolumeMixer for iOS 16.0 arm64e (M2 iPad Dopamine2-roothide)"
-          echo "📍 Working directory: $(pwd)"
-          echo "📍 THEOS: $THEOS"
-          echo "📍 dpkg-deb: $(which dpkg-deb)"
-          echo "📍 Available SDKs:"
-          ls -la $THEOS/sdks/ | grep -E '\.sdk$' || echo "No SDKs found"
-          echo ""
-          echo "📍 Rootless lib directory:"
-          ls -lah $THEOS/lib/iphone/rootless/ 2>/dev/null || echo "Directory empty"
-          echo ""
-          echo "📍 Frameworks in rootless:"
-          ls -lah $THEOS/lib/iphone/rootless/*.framework 2>/dev/null || echo "No frameworks"
-          echo ""
           
-          # Verify dpkg-deb is available
           if ! command -v dpkg-deb &> /dev/null; then
             echo "❌ CRITICAL: dpkg-deb not found!"
             exit 1
           fi
           
-          # Verify SDK exists before building
           if [ ! -d "$THEOS/sdks/iPhoneOS16.5.sdk" ]; then
-            echo "❌ CRITICAL: iPhoneOS16.5.sdk not found in $THEOS/sdks/"
+            echo "❌ CRITICAL: SDK not found!"
             exit 1
           fi
           
-          # Verify libPreferences.tbd exists in rootless directory
-          if [ ! -f "$THEOS/lib/iphone/rootless/libPreferences.tbd" ]; then
-            echo "❌ CRITICAL: libPreferences.tbd not found in rootless directory!"
-            exit 1
-          fi
+          echo "✅ All pre-build checks passed"
           
-          # Verify AltList.framework exists
-          if [ ! -f "$THEOS/lib/iphone/rootless/AltList.framework/AltList" ]; then
-            echo "❌ CRITICAL: AltList.framework/AltList not found!"
-            exit 1
-          fi
-          
-          echo "✅ All pre-build verifications passed"
-          echo ""
-          
-          # Clean previous builds
           make clean || true
           rm -rf packages .theos/_/packages 2>/dev/null || true
           
-          # Build with explicit settings for iOS 16.0 rootless
-          echo "🔧 Building with: make package FINALPACKAGE=1 DEBUG=0"
+          echo "🔧 Building with rootless settings..."
           make package FINALPACKAGE=1 DEBUG=0 MESSAGES=yes 2>&1 | tee build.log
           
           BUILD_STATUS=${PIPESTATUS[0]}
-          echo ""
           if [ $BUILD_STATUS -ne 0 ]; then
-            echo "❌ Build failed with status $BUILD_STATUS"
-            echo "=== Last 100 lines of build log ==="
+            echo "❌ Build failed!"
             tail -100 build.log
             exit $BUILD_STATUS
           fi
           
-          echo "✅ Build command completed successfully"
+          echo "✅ Build completed successfully"
 
-      - name: Verify Package Generation
+      - name: Verify Package
         run: |
-          echo "📦 Verifying generated .deb packages..."
-          echo ""
-          
-          # Search for .deb files in all possible locations
           FOUND_DEBS=$(find . -name "*.deb" -type f 2>/dev/null)
-          
           if [ -z "$FOUND_DEBS" ]; then
-            echo "❌ CRITICAL ERROR: No .deb files were generated!"
-            echo ""
-            echo "=== Checking build staging directory ==="
-            if [ -d ".theos/_" ]; then
-              echo "Contents of .theos/_:"
-              ls -lah .theos/_/
-              echo ""
-              if [ -f ".theos/_/DEBIAN/control" ]; then
-                echo "DEBIAN/control exists:"
-                cat .theos/_/DEBIAN/control
-              else
-                echo "❌ No DEBIAN/control file found"
-              fi
-            else
-              echo "❌ .theos/_ directory doesn't exist"
-            fi
-            echo ""
-            echo "=== Build log tail ==="
-            tail -50 build.log
+            echo "❌ No .deb files generated!"
             exit 1
-          else
-            echo "✅ Successfully found .deb package(s):"
-            echo "$FOUND_DEBS" | while read deb; do
-              echo ""
-              echo "📦 Package: $deb"
-              ls -lh "$deb"
-              echo "Package info:"
-              dpkg-deb --info "$deb" || echo "(Info unavailable)"
-              echo "Package contents:"
-              dpkg-deb --contents "$deb" | head -20
-            done
           fi
+          
+          echo "✅ Package(s) generated:"
+          echo "$FOUND_DEBS" | while read deb; do
+            echo "📦 $deb"
+            dpkg-deb --info "$deb" || true
+            dpkg-deb --contents "$deb" | head -20
+          done
 
       - name: Prepare Artifacts
         run: |
           mkdir -p artifacts
-          
-          # Copy all .deb files to artifacts directory
-          FOUND_COUNT=0
-          for deb in $(find . -name "*.deb" -type f 2>/dev/null); do
-            BASENAME=$(basename "$deb")
-            echo "📦 Copying: $deb -> artifacts/$BASENAME"
-            cp "$deb" "artifacts/$BASENAME"
-            FOUND_COUNT=$((FOUND_COUNT + 1))
-          done
-          
-          if [ $FOUND_COUNT -eq 0 ]; then
-            echo "❌ ERROR: No .deb files to upload!"
-            exit 1
-          fi
-          
-          echo ""
-          echo "✅ Prepared $FOUND_COUNT package(s) for upload:"
+          find . -name "*.deb" -type f -exec cp {} artifacts/ \;
           ls -lah artifacts/
 
       - name: Upload Package
