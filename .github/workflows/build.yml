@@ -18,15 +18,14 @@ jobs:
         run: |
           cd $HOME/theos
           curl -LO https://github.com/theos/sdks/archive/master.zip
-          unzip master.zip
+          unzip -q master.zip
           mv sdks-master sdks
           rm master.zip
           echo "✅ Theos SDKs installed"
-          ls -la sdks/ | head -10
 
       - name: Install LibActivator Headers
         run: |
-          git clone https://github.com/rpetrich/libactivator.git libactivator_src
+          git clone --depth=1 https://github.com/rpetrich/libactivator.git libactivator_src
           mkdir -p $HOME/theos/include/libactivator
           cp libactivator_src/*.h $HOME/theos/include/libactivator/ 2>/dev/null || true
           rm -rf libactivator_src
@@ -34,15 +33,10 @@ jobs:
 
       - name: Install AltList Framework
         run: |
-          git clone https://github.com/opa334/AltList.git altlist_src
+          git clone --depth=1 https://github.com/opa334/AltList.git altlist_src
           
           mkdir -p $HOME/theos/include/AltList
-          if [ -d "altlist_src/AltList" ]; then
-            cp altlist_src/AltList/*.h $HOME/theos/include/AltList/ 2>/dev/null || true
-          fi
-          if [ -d "altlist_src" ]; then
-            find altlist_src -name "*.h" -exec cp {} $HOME/theos/include/AltList/ \; 2>/dev/null || true
-          fi
+          find altlist_src -name "*.h" -exec cp {} $HOME/theos/include/AltList/ \; 2>/dev/null || true
           
           mkdir -p $HOME/theos/lib
           cat > $HOME/theos/lib/AltList.tbd << 'EOF'
@@ -63,158 +57,175 @@ EOF
           curl -L https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_macosx_x86_64 -o /tmp/ldid
           chmod +x /tmp/ldid
           sudo mv /tmp/ldid /usr/local/bin/ldid
-          ldid -V || echo "ldid version check failed"
+          ldid -V || echo "ldid installed"
           echo "✅ ldid installed"
 
       - name: Setup Preferences Framework
         run: |
-          FOUND_HEADERS=0
-          
-          LATEST_SDK=$(ls -d $HOME/theos/sdks/iPhoneOS*.sdk 2>/dev/null | sort -V | tail -1)
-          if [ -n "$LATEST_SDK" ]; then
-            echo "📦 Using SDK: $LATEST_SDK"
-            
-            if [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework" ]; then
-              mkdir -p "$HOME/theos/include/Preferences"
-              
-              if [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers" ]; then
-                cp -R "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers/"* "$HOME/theos/include/Preferences/"
-                FOUND_HEADERS=1
-              else
-                find "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework" -name "*.h" -exec cp {} "$HOME/theos/include/Preferences/" \; 2>/dev/null
-                if [ -f "$HOME/theos/include/Preferences/PSListController.h" ]; then
-                  FOUND_HEADERS=1
-                fi
-              fi
-            fi
-          fi
-          
-          if [ $FOUND_HEADERS -eq 0 ]; then
-            echo "⚠️  Downloading Preferences headers from GitHub..."
-            mkdir -p "$HOME/theos/include/Preferences"
-            
-            curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSListController.h" -o "$HOME/theos/include/Preferences/PSListController.h" || true
-            curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSSpecifier.h" -o "$HOME/theos/include/Preferences/PSSpecifier.h" || true
-            curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSTableCell.h" -o "$HOME/theos/include/Preferences/PSTableCell.h" || true
-            curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/PSViewController.h" -o "$HOME/theos/include/Preferences/PSViewController.h" || true
-            
-            if [ -f "$HOME/theos/include/Preferences/PSListController.h" ]; then
-              FOUND_HEADERS=1
-            fi
-          fi
-          
-          if [ $FOUND_HEADERS -eq 0 ]; then
-            echo "❌ Failed to get Preferences headers"
-            exit 1
-          fi
-          
-          echo "✅ Preferences headers installed"
-          
           mkdir -p "$HOME/theos/lib"
           if [ -f "theos/lib/Preferences.tbd" ]; then
             cp theos/lib/Preferences.tbd "$HOME/theos/lib/"
-            echo "✅ Preferences.tbd copied"
+            echo "✅ Preferences.tbd copied from repo"
           else
-            echo "❌ Preferences.tbd not found in repo"
+            echo "⚠️ Preferences.tbd not found in repo, creating minimal version"
+            cat > "$HOME/theos/lib/Preferences.tbd" << 'EOF'
+---
+archs:           [ arm64, arm64e ]
+platform:        ios
+install-name:    /System/Library/PrivateFrameworks/Preferences.framework/Preferences
+EOF
+          fi
+          
+          mkdir -p "$HOME/theos/include/Preferences"
+          LATEST_SDK=$(ls -d $HOME/theos/sdks/iPhoneOS*.sdk 2>/dev/null | sort -V | tail -1)
+          if [ -n "$LATEST_SDK" ] && [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers" ]; then
+            cp -R "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers/"* "$HOME/theos/include/Preferences/"
+            echo "✅ Preferences headers from SDK"
+          else
+            echo "⚠️ Downloading Preferences headers from GitHub"
+            for header in PSListController.h PSSpecifier.h PSTableCell.h PSViewController.h; do
+              curl -fsSL "https://raw.githubusercontent.com/theos/headers/master/Preferences/$header" -o "$HOME/theos/include/Preferences/$header" || true
+            done
+          fi
+          
+          if [ ! -f "$HOME/theos/include/Preferences/PSListController.h" ]; then
+            echo "❌ Failed to get Preferences headers"
             exit 1
           fi
+          echo "✅ Preferences framework ready"
 
       - name: Build VolumeMixer (iOS 16.0 arm64e Rootless)
         env:
           THEOS: ${{ env.THEOS }}
         run: |
           export THEOS=$HOME/theos
+          export PATH="/usr/local/bin:$PATH"
           
-          echo "🔨 Building VolumeMixer for iOS 16.0 arm64e (M2 iPad) with Dopamine2-roothide support..."
-          echo "Configuration from Makefile:"
-          echo "  - Architecture: arm64e"
-          echo "  - iOS Target: 16.0"
-          echo "  - Package Scheme: rootless"
+          echo "🔨 Building VolumeMixer for iOS 16.0 arm64e (M2 iPad Dopamine2-roothide)"
+          echo "📍 Working directory: $(pwd)"
+          echo "📍 THEOS: $THEOS"
           echo ""
           
+          # Clean previous builds
           make clean || true
+          rm -rf packages .theos/_/packages 2>/dev/null || true
           
-          # Build using Makefile settings (no overrides)
+          # Build with explicit package generation
+          echo "🔧 Running: make package FINALPACKAGE=1 DEBUG=0"
           make package FINALPACKAGE=1 DEBUG=0 MESSAGES=yes 2>&1 | tee build.log
           
-          BUILD_STATUS=$?
+          BUILD_STATUS=${PIPESTATUS[0]}
           echo ""
-          if [ $BUILD_STATUS -eq 0 ]; then
-            echo "✅ Build completed successfully"
-          else
+          if [ $BUILD_STATUS -ne 0 ]; then
             echo "❌ Build failed with status $BUILD_STATUS"
-            echo "Showing last 50 lines of build log:"
-            tail -50 build.log
+            echo "=== Last 100 lines of build log ==="
+            tail -100 build.log
             exit $BUILD_STATUS
           fi
+          
+          echo "✅ Build command completed"
 
       - name: Locate and Verify Package
         run: |
-          echo "📦 Locating built package..."
+          echo "📦 Searching for generated .deb packages..."
           echo ""
           
-          # Standard package location
+          # Check all possible locations
+          echo "=== Searching in packages/ ==="
           if [ -d "packages" ]; then
-            echo "=== packages/ directory ==="
-            ls -lah packages/
-            
-            PACKAGE_FILE=$(find packages -name "*.deb" -type f | head -1)
-            if [ -n "$PACKAGE_FILE" ]; then
-              echo ""
-              echo "✅ Package found: $PACKAGE_FILE"
-              echo ""
-              echo "Package info:"
-              dpkg-deb --info "$PACKAGE_FILE"
-              echo ""
-              echo "Package contents (first 30 files):"
-              dpkg-deb --contents "$PACKAGE_FILE" | head -30
-            fi
+            find packages -name "*.deb" -type f -exec ls -lh {} \; || echo "No .deb in packages/"
           else
-            echo "⚠️  No packages/ directory found"
+            echo "❌ packages/ directory does not exist"
           fi
           
           echo ""
-          echo "=== All .deb files in project ==="
-          find . -name "*.deb" -type f -exec ls -lh {} \;
-          
-          echo ""
-          echo "=== .theos structure ==="
+          echo "=== Searching in .theos/ ==="
           if [ -d ".theos" ]; then
-            echo "Files in .theos/_/:"
-            find .theos/_ -type f 2>/dev/null | head -20 || echo "No staged files"
-            echo ""
-            echo "Looking for .deb:"
-            find .theos -name "*.deb" 2>/dev/null || echo "No .deb found"
+            find .theos -name "*.deb" -type f -exec ls -lh {} \; || echo "No .deb in .theos/"
           else
-            echo "No .theos directory"
+            echo "❌ .theos/ directory does not exist"
           fi
+          
+          echo ""
+          echo "=== Searching entire project ==="
+          FOUND_DEBS=$(find . -name "*.deb" -type f 2>/dev/null)
+          if [ -z "$FOUND_DEBS" ]; then
+            echo "❌ CRITICAL: No .deb files found anywhere!"
+            echo ""
+            echo "=== Checking THEOS staging directory ==="
+            if [ -d ".theos/_" ]; then
+              echo "Files in .theos/_/:"
+              find .theos/_ -type f 2>/dev/null | head -30
+              echo ""
+              if [ -f ".theos/_/DEBIAN/control" ]; then
+                echo "control file exists:"
+                cat .theos/_/DEBIAN/control
+              else
+                echo "❌ No DEBIAN/control file - packaging didn't start"
+              fi
+            fi
+            echo ""
+            echo "=== Checking if dpkg-deb is available ==="
+            which dpkg-deb || echo "❌ dpkg-deb not found"
+            brew list | grep dpkg || echo "dpkg not installed via brew"
+            exit 1
+          else
+            echo "✅ Found .deb files:"
+            echo "$FOUND_DEBS" | while read deb; do
+              echo ""
+              echo "📦 Package: $deb"
+              ls -lh "$deb"
+              if command -v dpkg-deb &> /dev/null; then
+                echo "Package info:"
+                dpkg-deb --info "$deb" 2>/dev/null || echo "(dpkg-deb info unavailable)"
+              fi
+            done
+          fi
+
+      - name: Install dpkg tools
+        if: failure()
+        run: |
+          echo "Installing dpkg for packaging..."
+          brew install dpkg
+
+      - name: Retry Package Build with dpkg
+        if: failure()
+        run: |
+          export THEOS=$HOME/theos
+          export PATH="/usr/local/bin:$PATH"
+          echo "🔄 Retrying package build with dpkg installed..."
+          make package FINALPACKAGE=1 DEBUG=0
 
       - name: Prepare Artifacts
         run: |
           mkdir -p artifacts
           
-          # Find and copy all .deb files
+          # Find and copy all .deb files from all locations
           FOUND_COUNT=0
-          for deb in $(find . -name "*.deb" -type f 2>/dev/null); do
-            echo "📦 Copying: $deb"
-            cp "$deb" artifacts/
-            FOUND_COUNT=$((FOUND_COUNT + 1))
+          for location in packages .theos/packages .theos .; do
+            if [ -d "$location" ]; then
+              for deb in $(find "$location" -maxdepth 2 -name "*.deb" -type f 2>/dev/null); do
+                echo "📦 Copying: $deb -> artifacts/"
+                cp "$deb" artifacts/
+                FOUND_COUNT=$((FOUND_COUNT + 1))
+              done
+            fi
           done
           
           if [ $FOUND_COUNT -eq 0 ]; then
-            echo "❌ ERROR: No .deb files found!"
-            echo "Build may have failed. Check build logs above."
+            echo "❌ ERROR: No .deb files found to upload!"
+            echo "This should not happen if previous steps passed."
             exit 1
           fi
           
           echo ""
-          echo "✅ Prepared $FOUND_COUNT package(s)"
+          echo "✅ Prepared $FOUND_COUNT package(s) for upload:"
           ls -lah artifacts/
 
       - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
-          name: VolumeMixer_iOS16_arm64e_rootless_M2
+          name: VolumeMixer-iOS16-arm64e-rootless-M2
           path: artifacts/*.deb
           if-no-files-found: error
 
