@@ -64,24 +64,23 @@ jobs:
           echo "🔧 Creating AltList.framework for rootless jailbreak..."
           mkdir -p "$HOME/theos/lib/iphone/rootless/AltList.framework"
           
-          # Create proper TBD v4 file with correct YAML syntax
-          cat > "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList" << 'EOF'
---- !tapi-tbd
-tbd-version: 4
-targets: [ arm64-ios, arm64e-ios ]
-install-name: '@rpath/AltList.framework/AltList'
-current-version: 1.0
-compatibility-version: 1.0
-exports:
-  - targets: [ arm64-ios, arm64e-ios ]
-    symbols: [ '_OBJC_CLASS_$_ATLApplicationListController' ]
-    objc-classes: [ 'ATLApplicationListController' ]
-...
-EOF
+          # Create proper TBD v4 file (avoiding YAML heredoc issues)
+          TBD_FILE="$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          printf -- '--- !tapi-tbd\n' > "$TBD_FILE"
+          printf 'tbd-version: 4\n' >> "$TBD_FILE"
+          printf 'targets: [ arm64-ios, arm64e-ios ]\n' >> "$TBD_FILE"
+          printf "install-name: '@rpath/AltList.framework/AltList'\n" >> "$TBD_FILE"
+          printf 'current-version: 1.0\n' >> "$TBD_FILE"
+          printf 'compatibility-version: 1.0\n' >> "$TBD_FILE"
+          printf 'exports:\n' >> "$TBD_FILE"
+          printf '  - targets: [ arm64-ios, arm64e-ios ]\n' >> "$TBD_FILE"
+          printf "    symbols: [ '_OBJC_CLASS_\$_ATLApplicationListController' ]\n" >> "$TBD_FILE"
+          printf '    objc-classes: [ '"'"'ATLApplicationListController'"'"' ]\n' >> "$TBD_FILE"
+          printf '...\n' >> "$TBD_FILE"
           
           echo "✅ AltList.framework TBD created with @rpath"
           echo "📄 TBD file contents:"
-          cat "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          cat "$TBD_FILE"
           
           rm -rf altlist_src
 
