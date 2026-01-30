@@ -60,24 +60,27 @@ jobs:
           mkdir -p $HOME/theos/include/AltList
           find altlist_src -name "*.h" -exec cp {} $HOME/theos/include/AltList/ \; 2>/dev/null || true
           
-          # CRITICAL: Create framework structure for rootless jailbreak
-          # Use @rpath for dynamic loading on rootless systems
+          # Create framework structure for rootless jailbreak
           echo "🔧 Creating AltList.framework for rootless jailbreak..."
           mkdir -p "$HOME/theos/lib/iphone/rootless/AltList.framework"
           
-          # Create TBD with @rpath install-name for rootless compatibility
-          # The bundle will have rpath set to /var/jb/Library/Frameworks
-          # So @rpath/AltList.framework/AltList resolves to /var/jb/Library/Frameworks/AltList.framework/AltList
-          echo "---" > "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
-          echo "archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
-          echo "platform:        ios" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
-          echo "install-name:    @rpath/AltList.framework/AltList" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
-          echo "exports:" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
-          echo "  - archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
-          echo "    symbols:         [ _OBJC_CLASS_\$_ATLApplicationListController ]" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
-          echo "..." >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          # Create proper TBD v4 file with correct YAML syntax
+          cat > "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList" << 'EOF'
+--- !tapi-tbd
+tbd-version: 4
+targets: [ arm64-ios, arm64e-ios ]
+install-name: '@rpath/AltList.framework/AltList'
+current-version: 1.0
+compatibility-version: 1.0
+exports:
+  - targets: [ arm64-ios, arm64e-ios ]
+    symbols: [ '_OBJC_CLASS_$_ATLApplicationListController' ]
+    objc-classes: [ 'ATLApplicationListController' ]
+...
+EOF
           
-          echo "✅ AltList.framework created with @rpath for rootless"
+          echo "✅ AltList.framework TBD created with @rpath"
+          echo "📄 TBD file contents:"
           cat "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
           
           rm -rf altlist_src
