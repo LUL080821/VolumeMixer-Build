@@ -25,36 +25,37 @@ jobs:
 
       - name: Install iOS SDK
         run: |
-          echo "📦 Downloading and installing iOS SDKs..."
+          set -e
+          echo "📦 Downloading and installing iOS SDK 16.5..."
           cd $HOME/theos
           
-          # Download the SDKs
-          curl -LO https://github.com/theos/sdks/archive/master.zip
+          # Create sdks directory
+          mkdir -p sdks
           
-          # Unzip with verbose output
-          echo "Extracting SDKs..."
-          unzip -q master.zip
+          # Download the specific SDK in tar.xz format (more reliable than zip)
+          echo "Downloading iPhoneOS16.5.sdk.tar.xz..."
+          curl -L https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz -o sdks/iPhoneOS16.5.sdk.tar.xz
           
-          # Move and verify
-          mv sdks-master sdks
-          rm master.zip
+          # Extract the SDK
+          echo "Extracting SDK..."
+          cd sdks
+          tar -xf iPhoneOS16.5.sdk.tar.xz
+          rm iPhoneOS16.5.sdk.tar.xz
           
-          # List available SDKs
+          # Verify SDK exists
           echo ""
           echo "Available SDKs:"
-          ls -la sdks/
+          ls -la
           echo ""
           
-          # Verify iOS 16.5 SDK exists
-          if [ ! -d "sdks/iPhoneOS16.5.sdk" ]; then
-            echo "❌ ERROR: iPhoneOS16.5.sdk not found!"
+          if [ ! -d "iPhoneOS16.5.sdk" ]; then
+            echo "❌ ERROR: iPhoneOS16.5.sdk not found after extraction!"
             echo "Contents of sdks directory:"
-            ls -la sdks/
+            ls -la
             exit 1
           fi
           
-          echo "✅ iPhoneOS16.5.sdk verified"
-          echo "✅ Theos SDKs installed"
+          echo "✅ iPhoneOS16.5.sdk verified and installed"
 
       - name: Install LibActivator Headers
         run: |
@@ -73,14 +74,16 @@ jobs:
           
           mkdir -p $HOME/theos/lib
           
-          # Create AltList.tbd using echo to avoid heredoc issues
-          echo "---" > $HOME/theos/lib/AltList.tbd
-          echo "archs:           [ arm64, arm64e ]" >> $HOME/theos/lib/AltList.tbd
-          echo "platform:        ios" >> $HOME/theos/lib/AltList.tbd
-          echo "install-name:    /Library/Frameworks/AltList.framework/AltList" >> $HOME/theos/lib/AltList.tbd
-          echo "exports:" >> $HOME/theos/lib/AltList.tbd
-          echo "  - archs:           [ arm64, arm64e ]" >> $HOME/theos/lib/AltList.tbd
-          echo "    symbols:         [ _OBJC_CLASS_\$_ATLApplicationListController ]" >> $HOME/theos/lib/AltList.tbd
+          # Create AltList.tbd
+          cat > $HOME/theos/lib/AltList.tbd << 'EOF'
+---
+archs:           [ arm64, arm64e ]
+platform:        ios
+install-name:    /Library/Frameworks/AltList.framework/AltList
+exports:
+  - archs:           [ arm64, arm64e ]
+    symbols:         [ _OBJC_CLASS_$_ATLApplicationListController ]
+EOF
           
           rm -rf altlist_src
           echo "✅ AltList framework installed"
@@ -101,11 +104,12 @@ jobs:
             echo "✅ Preferences.tbd copied from repo"
           else
             echo "⚠️ Creating minimal Preferences.tbd"
-            # Use echo instead of heredoc
-            echo "---" > "$HOME/theos/lib/Preferences.tbd"
-            echo "archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/Preferences.tbd"
-            echo "platform:        ios" >> "$HOME/theos/lib/Preferences.tbd"
-            echo "install-name:    /System/Library/PrivateFrameworks/Preferences.framework/Preferences" >> "$HOME/theos/lib/Preferences.tbd"
+            cat > "$HOME/theos/lib/Preferences.tbd" << 'EOF'
+---
+archs:           [ arm64, arm64e ]
+platform:        ios
+install-name:    /System/Library/PrivateFrameworks/Preferences.framework/Preferences
+EOF
           fi
           
           mkdir -p "$HOME/theos/include/Preferences"
