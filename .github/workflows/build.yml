@@ -25,11 +25,35 @@ jobs:
 
       - name: Install iOS SDK
         run: |
+          echo "📦 Downloading and installing iOS SDKs..."
           cd $HOME/theos
+          
+          # Download the SDKs
           curl -LO https://github.com/theos/sdks/archive/master.zip
+          
+          # Unzip with verbose output
+          echo "Extracting SDKs..."
           unzip -q master.zip
+          
+          # Move and verify
           mv sdks-master sdks
           rm master.zip
+          
+          # List available SDKs
+          echo ""
+          echo "Available SDKs:"
+          ls -la sdks/
+          echo ""
+          
+          # Verify iOS 16.5 SDK exists
+          if [ ! -d "sdks/iPhoneOS16.5.sdk" ]; then
+            echo "❌ ERROR: iPhoneOS16.5.sdk not found!"
+            echo "Contents of sdks directory:"
+            ls -la sdks/
+            exit 1
+          fi
+          
+          echo "✅ iPhoneOS16.5.sdk verified"
           echo "✅ Theos SDKs installed"
 
       - name: Install LibActivator Headers
@@ -60,7 +84,6 @@ jobs:
           
           rm -rf altlist_src
           echo "✅ AltList framework installed"
-          cat $HOME/theos/lib/AltList.tbd
 
       - name: Install Ldid
         run: |
@@ -114,11 +137,19 @@ jobs:
           echo "📍 Working directory: $(pwd)"
           echo "📍 THEOS: $THEOS"
           echo "📍 dpkg-deb: $(which dpkg-deb)"
+          echo "📍 Available SDKs:"
+          ls -la $THEOS/sdks/ | grep -E '\.sdk$' || echo "No SDKs found"
           echo ""
           
           # Verify dpkg-deb is available
           if ! command -v dpkg-deb &> /dev/null; then
             echo "❌ CRITICAL: dpkg-deb not found!"
+            exit 1
+          fi
+          
+          # Verify SDK exists before building
+          if [ ! -d "$THEOS/sdks/iPhoneOS16.5.sdk" ]; then
+            echo "❌ CRITICAL: iPhoneOS16.5.sdk not found in $THEOS/sdks/"
             exit 1
           fi
           
