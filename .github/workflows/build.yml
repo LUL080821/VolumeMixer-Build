@@ -94,20 +94,37 @@ jobs:
           ldid -V || echo "ldid installed"
           echo "✅ ldid installed"
 
-      - name: Setup Preferences Framework
+      - name: Setup Preferences Framework (CRITICAL FIX)
         run: |
           mkdir -p "$HOME/theos/lib"
+          
+          # Copy repo's Preferences.tbd if it exists, otherwise create it
           if [ -f "theos/lib/Preferences.tbd" ]; then
-            cp theos/lib/Preferences.tbd "$HOME/theos/lib/"
-            echo "✅ Preferences.tbd copied from repo"
+            echo "✅ Using Preferences.tbd from repository"
+            cp theos/lib/Preferences.tbd "$HOME/theos/lib/Preferences.tbd"
           else
-            echo "⚠️ Creating minimal Preferences.tbd"
+            echo "⚠️ Creating Preferences.tbd"
             echo "---" > "$HOME/theos/lib/Preferences.tbd"
             echo "archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/Preferences.tbd"
             echo "platform:        ios" >> "$HOME/theos/lib/Preferences.tbd"
             echo "install-name:    /System/Library/PrivateFrameworks/Preferences.framework/Preferences" >> "$HOME/theos/lib/Preferences.tbd"
+            echo "exports:" >> "$HOME/theos/lib/Preferences.tbd"
+            echo "  - archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/Preferences.tbd"
+            echo "    symbols:         [ ]" >> "$HOME/theos/lib/Preferences.tbd"
+            echo "..." >> "$HOME/theos/lib/Preferences.tbd"
           fi
           
+          # CRITICAL FIX: Create symlink libPreferences.tbd -> Preferences.tbd
+          # The Makefile uses "volumemixer_LIBRARIES = Preferences" which makes the linker
+          # look for -lPreferences, which translates to libPreferences.tbd
+          cd "$HOME/theos/lib"
+          ln -sf Preferences.tbd libPreferences.tbd
+          echo "✅ Created libPreferences.tbd symlink for linker"
+          
+          # Verify both files exist
+          ls -lah Preferences.tbd libPreferences.tbd
+          
+          # Setup Preferences headers
           mkdir -p "$HOME/theos/include/Preferences"
           LATEST_SDK=$(ls -d $HOME/theos/sdks/iPhoneOS*.sdk 2>/dev/null | sort -V | tail -1)
           if [ -n "$LATEST_SDK" ] && [ -d "$LATEST_SDK/System/Library/PrivateFrameworks/Preferences.framework/Headers" ]; then
@@ -140,6 +157,9 @@ jobs:
           echo "📍 Available SDKs:"
           ls -la $THEOS/sdks/ | grep -E '\.sdk$' || echo "No SDKs found"
           echo ""
+          echo "📍 Theos lib directory contents:"
+          ls -lah $THEOS/lib/ | grep -i preferences
+          echo ""
           
           # Verify dpkg-deb is available
           if ! command -v dpkg-deb &> /dev/null; then
@@ -150,6 +170,12 @@ jobs:
           # Verify SDK exists before building
           if [ ! -d "$THEOS/sdks/iPhoneOS16.5.sdk" ]; then
             echo "❌ CRITICAL: iPhoneOS16.5.sdk not found in $THEOS/sdks/"
+            exit 1
+          fi
+          
+          # Verify libPreferences.tbd exists
+          if [ ! -f "$THEOS/lib/libPreferences.tbd" ]; then
+            echo "❌ CRITICAL: libPreferences.tbd not found!"
             exit 1
           fi
           
