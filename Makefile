@@ -1,12 +1,10 @@
 ifdef SIMULATOR
 export TARGET = simulator:clang:latest:8.0
 else
-export TARGET = iphone:clang:latest:14.5
-	ifeq ($(debug),0)
-		export ARCHS = arm64e
-	else
-		export ARCHS = arm64 arm64e
-	endif
+# iOS 16.0 targeting for M2 iPad with rootless jailbreak
+export TARGET = iphone:clang:16.5:16.0
+export ARCHS = arm64e
+export THEOS_PACKAGE_SCHEME = rootless
 endif
 
 INSTALL_TARGET_PROCESSES = SpringBoard
@@ -15,7 +13,7 @@ TWEAK_NAME = VolumeMixer
 
 VolumeMixer_FILES = Tweak.xm VMHookInfo.mm VMHookAudioUnit.mm 
 VolumeMixer_FILES += MRYIPC/MRYIPCCenter.m
-VolumeMixer_CFLAGS = -fobjc-arc -include Prefix.pch -Wno-error
+VolumeMixer_CFLAGS = -fobjc-arc -include Prefix.pch -Wno-error -Wno-unused-variable -Wno-unused-function -Wno-unused-value -Wno-deprecated-declarations
 VolumeMixer_CCFLAGS = -std=c++17 -fno-aligned-allocation
 VolumeMixer_LDFLAGS = -lc++ -fno-aligned-allocation
 VolumeMixer_LIBRARIES += substrate
@@ -32,18 +30,19 @@ volumemixer_FILES = volumemixerpref/VMPrefRootListController.m volumemixerpref/B
 volumemixer_INSTALL_PATH = /Library/PreferenceBundles
 volumemixer_FRAMEWORKS = UIKit
 volumemixer_LIBRARIES = Preferences
-volumemixer_CFLAGS = -fobjc-arc -include Prefix.pch -Wno-error
+volumemixer_CFLAGS = -fobjc-arc -include Prefix.pch -Wno-error -Wno-unused-variable
 volumemixer_EXTRA_FRAMEWORKS += AltList
 volumemixer_RESOURCE_DIRS = volumemixerpref/Resources
 
 CCVolumeMixer_BUNDLE_EXTENSION = bundle
 CCVolumeMixer_FILES = ccvolumemixer/CCVolumeMixer.m
-CCVolumeMixer_CFLAGS = -fobjc-arc
+CCVolumeMixer_CFLAGS = -fobjc-arc -Wno-error
 CCVolumeMixer_PRIVATE_FRAMEWORKS = ControlCenterUIKit
 CCVolumeMixer_INSTALL_PATH = /Library/ControlCenter/Bundles/
 CCVolumeMixer_RESOURCE_DIRS = ccvolumemixer/Resources
 
-export ADDITIONAL_CFLAGS += -Wno-error=unused-variable -Wno-error=unused-function -Wno-error=unused-value -Wno-error=deprecated-declarations -include Prefix.pch
+# Additional flags for compatibility and error suppression
+export ADDITIONAL_CFLAGS += -Wno-error=unused-variable -Wno-error=unused-function -Wno-error=unused-value -Wno-error=deprecated-declarations -Wno-error=incompatible-function-pointer-types -include Prefix.pch
 export ADDITIONAL_LDFLAGS += -lc++ -Wl,-ld_classic
 
 include $(THEOS)/makefiles/common.mk
