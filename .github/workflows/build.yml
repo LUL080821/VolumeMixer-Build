@@ -96,33 +96,42 @@ jobs:
 
       - name: Setup Preferences Framework (CRITICAL FIX)
         run: |
-          mkdir -p "$HOME/theos/lib"
+          # CRITICAL: The linker searches in theos/lib/iphone/rootless, NOT in theos/lib
+          # We must create the .tbd files in the rootless directory
+          
+          echo "🔧 Creating rootless lib directory..."
+          mkdir -p "$HOME/theos/lib/iphone/rootless"
           
           # Copy repo's Preferences.tbd if it exists, otherwise create it
           if [ -f "theos/lib/Preferences.tbd" ]; then
             echo "✅ Using Preferences.tbd from repository"
-            cp theos/lib/Preferences.tbd "$HOME/theos/lib/Preferences.tbd"
+            cp theos/lib/Preferences.tbd "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
           else
-            echo "⚠️ Creating Preferences.tbd"
-            echo "---" > "$HOME/theos/lib/Preferences.tbd"
-            echo "archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/Preferences.tbd"
-            echo "platform:        ios" >> "$HOME/theos/lib/Preferences.tbd"
-            echo "install-name:    /System/Library/PrivateFrameworks/Preferences.framework/Preferences" >> "$HOME/theos/lib/Preferences.tbd"
-            echo "exports:" >> "$HOME/theos/lib/Preferences.tbd"
-            echo "  - archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/Preferences.tbd"
-            echo "    symbols:         [ ]" >> "$HOME/theos/lib/Preferences.tbd"
-            echo "..." >> "$HOME/theos/lib/Preferences.tbd"
+            echo "⚠️ Creating Preferences.tbd in rootless directory"
+            echo "---" > "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
+            echo "archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
+            echo "platform:        ios" >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
+            echo "install-name:    /System/Library/PrivateFrameworks/Preferences.framework/Preferences" >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
+            echo "exports:" >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
+            echo "  - archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
+            echo "    symbols:         [ ]" >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
+            echo "..." >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
           fi
           
-          # CRITICAL FIX: Create symlink libPreferences.tbd -> Preferences.tbd
+          # CRITICAL FIX: Create libPreferences.tbd symlink in rootless directory
           # The Makefile uses "volumemixer_LIBRARIES = Preferences" which makes the linker
           # look for -lPreferences, which translates to libPreferences.tbd
-          cd "$HOME/theos/lib"
+          # The linker command includes: -L/Users/runner/theos/lib/iphone/rootless
+          # So we MUST create the symlink there, not in theos/lib
+          cd "$HOME/theos/lib/iphone/rootless"
           ln -sf Preferences.tbd libPreferences.tbd
-          echo "✅ Created libPreferences.tbd symlink for linker"
+          echo "✅ Created libPreferences.tbd symlink in rootless directory"
           
-          # Verify both files exist
-          ls -lah Preferences.tbd libPreferences.tbd
+          # Verify both files exist in rootless directory
+          echo ""
+          echo "📁 Contents of rootless lib directory:"
+          ls -lah "$HOME/theos/lib/iphone/rootless/" | grep -i preferences
+          echo ""
           
           # Setup Preferences headers
           mkdir -p "$HOME/theos/include/Preferences"
@@ -157,8 +166,8 @@ jobs:
           echo "📍 Available SDKs:"
           ls -la $THEOS/sdks/ | grep -E '\.sdk$' || echo "No SDKs found"
           echo ""
-          echo "📍 Theos lib directory contents:"
-          ls -lah $THEOS/lib/ | grep -i preferences
+          echo "📍 Rootless lib directory:"
+          ls -lah $THEOS/lib/iphone/rootless/ 2>/dev/null || echo "Directory empty"
           echo ""
           
           # Verify dpkg-deb is available
@@ -173,11 +182,16 @@ jobs:
             exit 1
           fi
           
-          # Verify libPreferences.tbd exists
-          if [ ! -f "$THEOS/lib/libPreferences.tbd" ]; then
-            echo "❌ CRITICAL: libPreferences.tbd not found!"
+          # Verify libPreferences.tbd exists in rootless directory
+          if [ ! -f "$THEOS/lib/iphone/rootless/libPreferences.tbd" ]; then
+            echo "❌ CRITICAL: libPreferences.tbd not found in rootless directory!"
+            echo "Contents of $THEOS/lib/iphone/rootless/:"
+            ls -la "$THEOS/lib/iphone/rootless/"
             exit 1
           fi
+          
+          echo "✅ All pre-build verifications passed"
+          echo ""
           
           # Clean previous builds
           make clean || true
