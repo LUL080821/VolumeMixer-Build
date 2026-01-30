@@ -4,10 +4,23 @@ platform:        ios
 install-name:    /System/Library/PrivateFrameworks/Preferences.framework/Preferences
 exports:
   - archs:           [ arm64, arm64e ]
-    objc-classes:    [ PSListController, PSSpecifier, PSTableCell, PSViewController ]
-    objc-ivars:      [ PSListController.specifiers, PSSpecifier.action ]
-    symbols:         [ _OBJC_CLASS_$_PSListController, _OBJC_CLASS_$_PSSpecifier,
-                       _OBJC_CLASS_$_PSTableCell, _OBJC_CLASS_$_PSViewController,
-                       _OBJC_METACLASS_$_PSListController, _OBJC_METACLASS_$_PSSpecifier,
-                       _OBJC_IVAR_$_PSListController.specifiers, _OBJC_IVAR_$_PSSpecifier.action ]
+    objc-classes:    [ PSListController, PSSpecifier, PSTableCell, PSViewController, 
+                       PSListItemsController, PSEditableListController, PSRootController ]
+    symbols:         [ _OBJC_CLASS_$_PSListController, _OBJC_METACLASS_$_PSListController,
+                       _OBJC_CLASS_$_PSSpecifier, _OBJC_METACLASS_$_PSSpecifier,
+                       _OBJC_CLASS_$_PSTableCell, _OBJC_METACLASS_$_PSTableCell,
+                       _OBJC_CLASS_$_PSViewController, _OBJC_METACLASS_$_PSViewController,
+                       _OBJC_CLASS_$_PSListItemsController, _OBJC_METACLASS_$_PSListItemsController,
+                       _OBJC_CLASS_$_PSEditableListController, _OBJC_METACLASS_$_PSEditableListController,
+                       _OBJC_CLASS_$_PSRootController, _OBJC_METACLASS_$_PSRootController,
+                       _OBJC_IVAR_$_PSListController._specifiers,
+                       _OBJC_IVAR_$_PSListController.specifiers,
+                       _OBJC_IVAR_$_PSSpecifier._action,
+                       _OBJC_IVAR_$_PSSpecifier.action,
+                       _OBJC_IVAR_$_PSSpecifier._getter,
+                       _OBJC_IVAR_$_PSSpecifier._setter,
+                       _OBJC_IVAR_$_PSSpecifier._target,
+                       _OBJC_IVAR_$_PSSpecifier._values,
+                       _OBJC_IVAR_$_PSSpecifier._titleDict,
+                       _OBJC_IVAR_$_PSSpecifier._properties ]
 ...
