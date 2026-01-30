@@ -65,26 +65,40 @@ jobs:
           rm -rf libactivator_src
           echo "✅ LibActivator headers installed"
 
-      - name: Install AltList Framework
+      - name: Install AltList Framework (CRITICAL FIX)
         run: |
           git clone --depth=1 https://github.com/opa334/AltList.git altlist_src
           
+          # Install headers
           mkdir -p $HOME/theos/include/AltList
           find altlist_src -name "*.h" -exec cp {} $HOME/theos/include/AltList/ \; 2>/dev/null || true
           
-          mkdir -p $HOME/theos/lib
+          # CRITICAL: Create framework structure in rootless directory
+          # The Makefile uses "volumemixer_EXTRA_FRAMEWORKS += AltList" which means
+          # the linker searches with "-framework AltList" flag, looking for:
+          # AltList.framework/AltList in framework search paths (-F directories)
           
-          # Create AltList.tbd using echo to avoid heredoc issues in GitHub Actions
-          echo "---" > $HOME/theos/lib/AltList.tbd
-          echo "archs:           [ arm64, arm64e ]" >> $HOME/theos/lib/AltList.tbd
-          echo "platform:        ios" >> $HOME/theos/lib/AltList.tbd
-          echo "install-name:    /Library/Frameworks/AltList.framework/AltList" >> $HOME/theos/lib/AltList.tbd
-          echo "exports:" >> $HOME/theos/lib/AltList.tbd
-          echo "  - archs:           [ arm64, arm64e ]" >> $HOME/theos/lib/AltList.tbd
-          echo "    symbols:         [ _OBJC_CLASS_\$_ATLApplicationListController ]" >> $HOME/theos/lib/AltList.tbd
+          echo "🔧 Creating AltList.framework structure in rootless directory..."
+          mkdir -p "$HOME/theos/lib/iphone/rootless/AltList.framework"
+          
+          # Create the framework's main binary file (AltList.tbd)
+          echo "---" > "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          echo "archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          echo "platform:        ios" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          echo "install-name:    /Library/Frameworks/AltList.framework/AltList" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          echo "exports:" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          echo "  - archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          echo "    symbols:         [ _OBJC_CLASS_\$_ATLApplicationListController ]" >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          echo "..." >> "$HOME/theos/lib/iphone/rootless/AltList.framework/AltList"
+          
+          # Verify framework structure
+          echo ""
+          echo "📁 AltList.framework structure:"
+          ls -lah "$HOME/theos/lib/iphone/rootless/AltList.framework/"
+          echo ""
           
           rm -rf altlist_src
-          echo "✅ AltList framework installed"
+          echo "✅ AltList framework installed in rootless directory"
 
       - name: Install Ldid
         run: |
@@ -94,11 +108,9 @@ jobs:
           ldid -V || echo "ldid installed"
           echo "✅ ldid installed"
 
-      - name: Setup Preferences Framework (CRITICAL FIX)
+      - name: Setup Preferences Framework
         run: |
-          # CRITICAL: The linker searches in theos/lib/iphone/rootless, NOT in theos/lib
-          # We must create the .tbd files in the rootless directory
-          
+          # Create rootless lib directory
           echo "🔧 Creating rootless lib directory..."
           mkdir -p "$HOME/theos/lib/iphone/rootless"
           
@@ -118,11 +130,7 @@ jobs:
             echo "..." >> "$HOME/theos/lib/iphone/rootless/Preferences.tbd"
           fi
           
-          # CRITICAL FIX: Create libPreferences.tbd symlink in rootless directory
-          # The Makefile uses "volumemixer_LIBRARIES = Preferences" which makes the linker
-          # look for -lPreferences, which translates to libPreferences.tbd
-          # The linker command includes: -L/Users/runner/theos/lib/iphone/rootless
-          # So we MUST create the symlink there, not in theos/lib
+          # Create libPreferences.tbd symlink in rootless directory
           cd "$HOME/theos/lib/iphone/rootless"
           ln -sf Preferences.tbd libPreferences.tbd
           echo "✅ Created libPreferences.tbd symlink in rootless directory"
@@ -169,6 +177,9 @@ jobs:
           echo "📍 Rootless lib directory:"
           ls -lah $THEOS/lib/iphone/rootless/ 2>/dev/null || echo "Directory empty"
           echo ""
+          echo "📍 Frameworks in rootless:"
+          ls -lah $THEOS/lib/iphone/rootless/*.framework 2>/dev/null || echo "No frameworks"
+          echo ""
           
           # Verify dpkg-deb is available
           if ! command -v dpkg-deb &> /dev/null; then
@@ -185,8 +196,12 @@ jobs:
           # Verify libPreferences.tbd exists in rootless directory
           if [ ! -f "$THEOS/lib/iphone/rootless/libPreferences.tbd" ]; then
             echo "❌ CRITICAL: libPreferences.tbd not found in rootless directory!"
-            echo "Contents of $THEOS/lib/iphone/rootless/:"
-            ls -la "$THEOS/lib/iphone/rootless/"
+            exit 1
+          fi
+          
+          # Verify AltList.framework exists
+          if [ ! -f "$THEOS/lib/iphone/rootless/AltList.framework/AltList" ]; then
+            echo "❌ CRITICAL: AltList.framework/AltList not found!"
             exit 1
           fi
           
