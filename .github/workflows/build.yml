@@ -27,6 +27,28 @@ jobs:
           chmod +x /tmp/ldid
           sudo mv /tmp/ldid /usr/local/bin/ldid
 
+      - name: Install Preferences Framework
+        run: |
+          # Find Xcode SDK path
+          XCODE_PATH=$(xcode-select -p)
+          XCODE_SDK="$XCODE_PATH/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
+          
+          # Create Theos SDK directory structure
+          THEOS_SDK="$HOME/theos/sdks/iPhoneOS16.5.sdk"
+          mkdir -p "$THEOS_SDK/System/Library/PrivateFrameworks"
+          
+          # Copy Preferences.framework from Xcode to Theos
+          if [ -d "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework" ]; then
+            cp -R "$XCODE_SDK/System/Library/PrivateFrameworks/Preferences.framework" \
+                  "$THEOS_SDK/System/Library/PrivateFrameworks/"
+            echo "✅ Preferences.framework copied successfully"
+          else
+            echo "❌ Preferences.framework not found in Xcode SDK"
+            echo "Xcode SDK path: $XCODE_SDK"
+            ls -la "$XCODE_SDK/System/Library/PrivateFrameworks/" || true
+            exit 1
+          fi
+
       - name: Build VolumeMixer (arm64e for M2)
         env:
           THEOS: ${{ env.THEOS }}
