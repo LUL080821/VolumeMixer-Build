@@ -4,5 +4,10 @@ platform:        ios
 install-name:    /System/Library/PrivateFrameworks/Preferences.framework/Preferences
 exports:
   - archs:           [ arm64, arm64e ]
-    symbols:         [ ]
+    objc-classes:    [ PSListController, PSSpecifier, PSTableCell, PSViewController ]
+    objc-ivars:      [ PSListController.specifiers, PSSpecifier.action ]
+    symbols:         [ _OBJC_CLASS_$_PSListController, _OBJC_CLASS_$_PSSpecifier,
+                       _OBJC_CLASS_$_PSTableCell, _OBJC_CLASS_$_PSViewController,
+                       _OBJC_METACLASS_$_PSListController, _OBJC_METACLASS_$_PSSpecifier,
+                       _OBJC_IVAR_$_PSListController.specifiers, _OBJC_IVAR_$_PSSpecifier.action ]
 ...
