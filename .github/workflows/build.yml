@@ -48,18 +48,19 @@ jobs:
           find altlist_src -name "*.h" -exec cp {} $HOME/theos/include/AltList/ \; 2>/dev/null || true
           
           mkdir -p $HOME/theos/lib
-          cat > $HOME/theos/lib/AltList.tbd << 'EOF'
----
-archs:           [ arm64, arm64e ]
-platform:        ios
-install-name:    /Library/Frameworks/AltList.framework/AltList
-exports:
-  - archs:           [ arm64, arm64e ]
-    symbols:         [ _OBJC_CLASS_$_ATLApplicationListController ]
-EOF
+          
+          # Create AltList.tbd using echo to avoid heredoc issues
+          echo "---" > $HOME/theos/lib/AltList.tbd
+          echo "archs:           [ arm64, arm64e ]" >> $HOME/theos/lib/AltList.tbd
+          echo "platform:        ios" >> $HOME/theos/lib/AltList.tbd
+          echo "install-name:    /Library/Frameworks/AltList.framework/AltList" >> $HOME/theos/lib/AltList.tbd
+          echo "exports:" >> $HOME/theos/lib/AltList.tbd
+          echo "  - archs:           [ arm64, arm64e ]" >> $HOME/theos/lib/AltList.tbd
+          echo "    symbols:         [ _OBJC_CLASS_\$_ATLApplicationListController ]" >> $HOME/theos/lib/AltList.tbd
           
           rm -rf altlist_src
           echo "✅ AltList framework installed"
+          cat $HOME/theos/lib/AltList.tbd
 
       - name: Install Ldid
         run: |
@@ -77,12 +78,11 @@ EOF
             echo "✅ Preferences.tbd copied from repo"
           else
             echo "⚠️ Creating minimal Preferences.tbd"
-            cat > "$HOME/theos/lib/Preferences.tbd" << 'EOF'
----
-archs:           [ arm64, arm64e ]
-platform:        ios
-install-name:    /System/Library/PrivateFrameworks/Preferences.framework/Preferences
-EOF
+            # Use echo instead of heredoc
+            echo "---" > "$HOME/theos/lib/Preferences.tbd"
+            echo "archs:           [ arm64, arm64e ]" >> "$HOME/theos/lib/Preferences.tbd"
+            echo "platform:        ios" >> "$HOME/theos/lib/Preferences.tbd"
+            echo "install-name:    /System/Library/PrivateFrameworks/Preferences.framework/Preferences" >> "$HOME/theos/lib/Preferences.tbd"
           fi
           
           mkdir -p "$HOME/theos/include/Preferences"
